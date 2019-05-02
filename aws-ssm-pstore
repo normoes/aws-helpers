@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+if [ "$#" == 0 ]; then
+    echo "Recommendation:"
+    echo "  * Copy script, e.g.: cp aws-ssm-pstore ~/.local/bin/ (directory needs to be in PATH)"
+    echo "  * Copy bash completion: cp aws-ssm-pstore-completion.bash /etc/bash_completion.d/"
+    echo "Usage:"
+    echo "  Use like this:"
+    echo "     # without pass as backend"
+    echo "     aws-ssm-pstore <profile_from_~/.aws/config>"
+    echo "     aws-ssm-pstore some_aws_profile"
+    echo "     # with pass as backend"
+    echo "     aws-ssm-pstore <profile_from_~/.aws/config> <path_to_path_keystore_folder>"
+    echo "     aws-ssm-pstore some_aws_profile ~/.password-store/aws/vaults"
+    echo "     # bash completion"
+    echo "     aws-ssm-pstore some_<TAB> ~/.password-store/<TAB>"
+    echo "Use different AWS region:"
+    echo "  AWS_REGION=us-east-1 AWS_DEFAULT_REGION=us-east-1 aws-ssm-pstore <profile_from_~/.aws/config> <path_to_path_keystore_folder>"
+    echo "Use different AWS KMS key for chamber:"
+    echo "  CHAMBER_KMS_KEY_ALIAS=not_default_key aws-ssm-pstore <profile_from_~/.aws/config> <path_to_path_keystore_folder>"
+fi
+
+# assuming profile was used
+cmd="aws-vault exec $1 --assume-role-ttl=15m --session-ttl=12h"
+
+if [ "$#" == 2  ]; then
+    # just assuming 'pass' backend
+    prefix="${2#*.password-store/}"
+    BACKEND_PASS_OPTIONS="--backend=pass --pass-prefix=$prefix --pass-cmd=pass"
+    cmd="$cmd $BACKEND_PASS_OPTIONS"
+fi
+
+bash -c "$cmd -- aws ssm describe-parameters | jq '.Parameters | .[].Name' | cut -d '/' -f 2 | sort | uniq"
