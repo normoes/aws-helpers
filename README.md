@@ -1,11 +1,11 @@
 # aws-helpers
 
-## aws_get_instance_ip_service_runs_on.py
+## aws_get_instance_service_runs_on.py
 
 ### Why
 I would like to easily ssh into the instance an ECS service is running on. When deployed into a cluster with several instances you cannot accomplish this using `awscli`.
 
-I work through a VPN, so I am only interested in the instances' private IP addresses.
+I work through a VPN, so I am only interested in the instances' private IP addresses. When using the AWS Session Manager I am interested in the instance's id.
 
 I found a way for **ECS services that use service discovery** and register a DNS name with AWS Route53.
 
@@ -13,7 +13,7 @@ If the infrastructure is deployed with terraform, the service names as well as t
 
 ### How
 
-The tool is best used with `aws-vault`. So far I did not implement reading AWS profiles with boto3 e.g.
+The tool is best used with `aws-vault`. So far I did not implement reading AWS profiles with `boto3` e.g.
 
 The tool gets the DNS name of the service (AWS Route53). It also gets the name of the cluster the service was created in. Also the tool gets the AWS region to use.
 
@@ -31,8 +31,14 @@ There are more elegant ways for sure. This one is working and might get optimize
 
 I created an alias to directly use the output of the tool and ssh into the appropriate EC2 instance:
 ```
-ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_ip_service_runs_on.py --region eu-west-2 --cluster my-cluster --dns dns.name.com)"
+ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_service_runs_on.py --region eu-west-2 --cluster my-cluster --dns dns.name.com)"
 ```
+
+The default output is the instance's private IP address.
+
+If called with `--output id` it displays the instance's id.
+
+If called with `--output all` it displays both of the values above. In addition it returns the instance's private DNS name.
 
 ## aws-ssm-pstore
 
