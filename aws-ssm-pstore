@@ -30,4 +30,6 @@ if [ "$#" == 2  ]; then
     cmd="$cmd $BACKEND_PASS_OPTIONS"
 fi
 
-bash -c "$cmd -- aws ssm describe-parameters | jq '.Parameters | .[].Name' | cut -d '/' -f 2 | sort | uniq"
+# bash -c "$cmd -- aws ssm describe-parameters | jq '.Parameters | .[].Name' | cut -d '/' -f 2 | sort | uniq"
+RESULT=($($cmd -- aws ssm describe-parameters | jq '.Parameters | .[].Name'))
+for t in \"${RESULT[@]}\"; do res=${t%/*} && res_=${res/\"\//} && echo \"$res_\" | tr -d "\"" ; done | sort | uniq
