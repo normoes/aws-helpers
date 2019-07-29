@@ -39,22 +39,23 @@ Only the first match will be considered.
 
 
 ### Usage
+For better readability I will leave out `aws-vault` in the examples below.
 
 I created an alias to directly use the output of the tool and ssh into the appropriate EC2 instance:
 ```
 # Get instance ip by service DNS name
-ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_service_runs_on.py by-service-dns --region eu-west-2 --cluster my-cluster --dns dns.name.com)"
+ssh ec2-user@"$(python /path/to/aws_get_instance_service_runs_on.py by-service-dns --region eu-west-2 --cluster my-cluster --dns dns.name.com)"
 # Get instance id by service name
-ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_service_runs_on.py by-service-name --region eu-west-2 --cluster my-cluster --name part_of_service_name)"
+aws ssm start-session --target="$(python /path/to/aws_get_instance_service_runs_on.py by-service-name --region eu-west-2 --cluster my-cluster --name part_of_service_name)"
 # List all instance ids in cluster
-ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_service_runs_on.py instance-ids --region eu-west-2 --cluster my-cluster)"
+python /path/to/aws_get_instance_service_runs_on.py instance-ids --region eu-west-2 --cluster my-cluster
 ```
 
 The default output of the subcommand `by-service-dns` is the instance's private IP address.
 * If called with `--output id` it displays the instance's id.
     ```
         # Get instance id by service DNS name
-        ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_service_runs_on.py by-service-dns --region eu-west-2 --cluster my-cluster --dns dns.name.com --output id)"
+        aws ssm start-session --target="$(python /path/to/aws_get_instance_service_runs_on.py by-service-dns --region eu-west-2 --cluster my-cluster --dns dns.name.com --output id)"
     ```
 * If called with `--output all` it displays both of the values above. In addition it returns the instance's private DNS name.
 * If called with `--output service` it displays the service's IP address only.
