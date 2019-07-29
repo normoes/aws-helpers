@@ -7,13 +7,17 @@ I would like to easily ssh into the instance an ECS service is running on. When 
 
 I work through a VPN, so I am only interested in the instances' private IP addresses. When using the AWS Session Manager I am interested in the instance's id.
 
-I found a way for **ECS services that use service discovery** and register a DNS name with AWS Route53.
+The script provides two ways to get the instance's information:
+* **1. approach**: For **ECS services that use service discovery** and register a DNS name with AWS Route53,it's possible to get the services's/container's private IP and then check which EC2 instance contains the same private IP.
+* **2. approach**: When using AWS SSM (with `ssm-agent` on EC2 instances and AWS Session Manager Plugin locally) the tool will connect to every ECS cluster instance and compares a given service with running ones.
 
 If the infrastructure is deployed with terraform, the service names as well as the DNS names of the services become predictable.
 
 ### How
 
 The tool is best used with `aws-vault`. So far I did not implement reading AWS profiles with `boto3` e.g.
+
+**1. approach** (services with service discovery only):
 
 The tool gets the DNS name of the service (AWS Route53). It also gets the name of the cluster the service was created in. Also the tool gets the AWS region to use.
 
@@ -25,20 +29,35 @@ The association between the service's DNS name and the instance provate IP.
 * Get the private IP addresses of these instances and compareto the IP address of the service.
 * The match reveals the correct instance.
 
-There are more elegant ways for sure. This one is working and might get optimized over time.
+**2. approach** (all services, requires a working AWS SSM setup):
+
+The tool gets the name of the service or part of it (AWS ECS service). It also gets the name of the cluster the service was created in. Also the tool gets the AWS region to use.
+
+All cluster instances are checked for running docker containers. Using regular expressions the given service name is search for in the docker container names. If a match is found the according instance idwill be returned.
+
+Only the first match will be considered.
+
 
 ### Usage
 
 I created an alias to directly use the output of the tool and ssh into the appropriate EC2 instance:
 ```
-ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_service_runs_on.py --region eu-west-2 --cluster my-cluster --dns dns.name.com)"
+# Get instance ip by service DNS name
+ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_service_runs_on.py by-service-dns --region eu-west-2 --cluster my-cluster --dns dns.name.com)"
+# Get instance id by service name
+ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_service_runs_on.py by-service-name --region eu-west-2 --cluster my-cluster --name part_of_service_name)"
+# List all instance ids in cluster
+ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_service_runs_on.py instance-ids --region eu-west-2 --cluster my-cluster)"
 ```
 
-The default output is the instance's private IP address.
-
-If called with `--output id` it displays the instance's id.
-
-If called with `--output all` it displays both of the values above. In addition it returns the instance's private DNS name.
+The default output of the subcommand `by-service-dns` is the instance's private IP address.
+* If called with `--output id` it displays the instance's id.
+    ```
+        # Get instance id by service DNS name
+        ssh ec2-user@"$(aws-vault-alias-using-password-manager -- /path/to/aws_get_instance_service_runs_on.py by-service-dns --region eu-west-2 --cluster my-cluster --dns dns.name.com --output id)"
+    ```
+* If called with `--output all` it displays both of the values above. In addition it returns the instance's private DNS name.
+* If called with `--output service` it displays the service's IP address only.
 
 ## aws-ssm-pstore
 
@@ -47,7 +66,9 @@ Using **chamber** (https://github.com/segmentio/chamber) to manage the AWS Parem
 
 With a parameter called `/project/database_url` that has the value `postgres://user:passwd@some_endpoint.com:5432`, the service (in **chamber** talk) is `project`.
 
-**chamber** itself does not offer such an option.
+~~**chamber** itself does not offer such an option.~~
+
+There is a pending [PR](https://github.com/segmentio/chamber/pull/187) which implements this feature.
 
 ### How
 
