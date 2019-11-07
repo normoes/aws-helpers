@@ -51,6 +51,12 @@ aws ssm start-session --target="$(python /path/to/aws_get_instance_service_runs_
 python /path/to/aws_get_instance_service_runs_on.py instance-ids --region eu-west-2 --cluster my-cluster
 ```
 
+Using regular expressions
+`aws-vault-css-dev -- python aws_get_instance_service_runs_on.py by-service-name --region eu-west-2 --cluster dev --name "price-redis-[a-z0-9]*$" --debug`
+
+`--debug` shows additional output in order to really get the correct container (service) in case more than one was found e.g..
+
+
 The default output of the subcommand `by-service-dns` is the instance's private IP address.
 * If called with `--output id` it displays the instance's id.
     ```
@@ -63,13 +69,25 @@ The default output of the subcommand `by-service-dns` is the instance's private 
 ## aws-ssm-pstore
 
 ### Why
+
+This tool isdeprecated since `chamber` now provides:
+```
+    chamber list-services
+```
+which does exactly what I want.
+
+---
+
 Using **chamber** (https://github.com/segmentio/chamber) to manage the AWS Paremter Store (part of SSM - AWS Systems Manager), I was missing the possiblitiy to list chamber services which are basically just the first part of the parameter name.
 
 With a parameter called `/project/database_url` that has the value `postgres://user:passwd@some_endpoint.com:5432`, the service (in **chamber** talk) is `project`.
 
 ~~**chamber** itself does not offer such an option.~~
 
-There is a pending [PR](https://github.com/segmentio/chamber/pull/187) which implements this feature.
+There is a ~~pending~~ merged [PR](https://github.com/segmentio/chamber/pull/187) which implements this feature.
+
+
+
 
 ### How
 
