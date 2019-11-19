@@ -215,8 +215,9 @@ def main():
         "--debug", action='store_true',  help="Show debug info."
     )
     
-    # By service DNS name
     subparsers = parser.add_subparsers(help='sub-command help', dest='subcommand')
+    subparsers.required = True
+
     # create the parser for the "a" command
     parser_dns = subparsers.add_parser('by-service-dns', parents=[config], help="Get instance information by service's dns name.")
     parser_dns.add_argument(
@@ -253,13 +254,12 @@ def main():
         logger.setLevel(logging.INFO)
 
     region = args.region
+    logger.info(f"Working in: {region}")
     
     if CLUSTER_NAME:
         cluster_name = CLUSTER_NAME
     else:
         cluster_name = args.cluster
-    
-    logger.info(f"Working in: {region}")
 
     session = boto3.session.Session()
     ecs_client = session.client("ecs", region)
