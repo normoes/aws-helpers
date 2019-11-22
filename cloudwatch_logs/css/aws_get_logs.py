@@ -53,8 +53,6 @@ import re
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-__version__ = "0.0.1"
-
 logging.basicConfig()
 logger = logging.getLogger("AWSGetLogs")
 logger.setLevel(logging.INFO)
@@ -279,6 +277,8 @@ def get_logs(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, client=Non
         sys.exit(1)
 
 def main():
+    from _version import __version__
+
     parser = argparse.ArgumentParser(
         description="Get AWS Cloudwatch logs.", epilog="Example:\npython aws_get_logs.py --region <aws_region> --group <log_group_name> --stream <log_stream_name> --output <output_info>", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )

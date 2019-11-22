@@ -89,6 +89,27 @@ The default output of the subcommand `by-service-dns` is the instance's private 
 * If called with `--output all` it displays both of the values above. In addition it returns the instance's private DNS name.
 * If called with `--output service` it displays the service's IP address only.
 
+## cloudwatch_logs
+
+`aws_get_logs.py`
+
+This is work in progress.
+
+## Why
+
+There are tools  like `saw`, but I am not quite comfortable with all of them. So I just wanted to try and do it myself.
+
+## How
+
+This project uses `boto3`.
+
+## Usage
+
+Up to now, it's possible to use the following sub commands.
+* `filter-stream` - Get Cloudwatch logs by a given stream.
+* `insights` - Query Cloudwatch logs with an Insight query. Waits up to 3 minutes for the query to finish.
+
+`--debug` shows additional output in order to see what's going on.
 ## list_chamber_services
 
 `aws-ssm-pstore`
@@ -172,24 +193,3 @@ Change the appropriate environment variables to write secrets with another AWS K
 CHAMBER_KMS_KEY_ALIAS=not_default_key aws-ssm-pstore <profile_from_~/.aws/config> <path_to_path_keystore_folder>
 ```
 
-## cloudwatch_logs
-
-`aws_get_logs.py`
-
-This is work in progress.
-
-## Why
-
-There are tools  like `saw`, but I am not quite comfortable with all of them. So I just wanted to try and do it myself.
-
-## How
-
-This project uses `boto3`.
-
-## Usage
-
-Up to now, it's possible to use the following sub commands.
-* `filter-stream` - Get Cloudwatch logs by a given stream.
-* `insights` - Query Cloudwatch logs with an Insight query. Waits up to 3 minutes for the query to finish.
-
-`--debug` shows additional output in order to see what's going on.

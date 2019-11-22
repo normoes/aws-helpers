@@ -51,10 +51,6 @@ import json
 from time import sleep
 import re
 
-__version__ = "0.0.1"
-
-
-
 logging.basicConfig()
 logger = logging.getLogger("AwsGetInstance")
 logger.setLevel(logging.INFO)
@@ -193,6 +189,8 @@ def main():
     """
     
     """
+    from _version import __version__
+
     parser = argparse.ArgumentParser(
         description="Get instance info by a given service.", epilog="Example:\npython aws_get_instance_service_runs_on.py by-service-dns --region <aws_region> --cluster <ecs_cluster_name> --dns <service_dns_name> --output <output_info>", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )

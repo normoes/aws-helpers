@@ -3,3 +3,4 @@
 *.pyc
 
 venv/
+pypi_upload.txt
