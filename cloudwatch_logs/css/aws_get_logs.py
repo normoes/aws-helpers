@@ -2,7 +2,7 @@
 
 """
 Goal:
-  * Get CLoudwatch logs.
+  * Get Cloudwatch logs.
 
 How to:
   * Get help
@@ -134,12 +134,7 @@ def show_most_recent_log_streams(log_group=LOG_GROUP, client=None):
 def get_logs_filter_streams(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, start_time_offset=START_TIME, client=None, debug=False):
     next_token = "first"
     start_time, end_time = make_time(start_time_offset)
-    # end_time = datetime.utcnow()
-    # start_time = end_time - timedelta(hours=start_time_offset)
-    # end_time = int(datetime.timestamp(end_time)) * 1000
-    # start_time = int(datetime.timestamp(start_time) * 1000)
     parameters = {"logGroupName": log_group, "logStreamNamePrefix": log_stream, "limit": limit, "startTime": start_time, "endTime": end_time}
-    # most_recent_logs = defaultdict(lambda: list())
     timestamps = list()
     searched_log_streams = list()
     while next_token:
@@ -170,11 +165,7 @@ def get_logs_filter_streams(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LI
         except (client.exceptions.ResourceNotFoundException) as e:
             logger.error(f"Did not find log group '{log_group}'. Error: {str(e)}")
             sys.exit(1)
-    # if most_recent_logs:
-    #     return most_recent_logs
-    # else:
-    #     print(f"No streams found with log group '{log_group}'")
-    #     return dict()
+
     if debug:
        if timestamps:
            sorted_timestamps = sorted(timestamps)
@@ -184,6 +175,43 @@ def get_logs_filter_streams(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LI
            print(searched_log_streams)
     print()
             
+
+@init_log_message
+def get_logs_filter_streams_follow(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, start_time_offset=START_TIME, client=None, debug=False):
+    next_token = "first"
+    start_time, end_time = make_time(start_time_offset)
+    parameters = {"logGroupName": log_group, "logStreamNamePrefix": log_stream, "limit": limit, "startTime": start_time, "endTime": end_time}
+    timestamps = list()
+    searched_log_streams = list()
+    while True:
+        try:
+            response = client.filter_log_events(**parameters)
+            # print(json.dumps(response, indent=4))
+
+            if response:
+                log_streams = response.get("searchedLogStreams", dict())
+                searched_log_streams.append(log_streams)
+                next_token = response.get("nextToken", "")
+                if next_token:
+                    parameter_next_token = {"nextToken": next_token}
+                    parameters.update(parameter_next_token)
+                else:
+                    parameters.pop("nextToken", None)
+                log_events = response.get("events", list())
+                for log_event in log_events:
+                    log_stream_name = log_event.get("logStreamName", None)
+                    timestamp = log_event.get("timestamp", -1)
+                    message = log_event.get("message", "")
+                    print(message)
+        except (botocore.errorfactory.ClientError) as e:
+            error_code = e.response["Error"]["Code"]
+            if error_code == "InvalidParameterException":
+                logger.error(f"Wrong parameters with log group '{log_group}'. Error: {str(e)}.")
+                sys.exit(1)
+            elif error_code == "ResourceNotFoundException":
+                logger.error(f"Did not find log group '{log_group}'. Error: {str(e)}.")
+                sys.exit(1)
+
 
 @init_log_message
 def get_logs_using_insights(log_group=LOG_GROUP, query=QUERY, limit=LIMIT, start_time_offset=START_TIME, client=None):
@@ -277,7 +305,10 @@ def get_logs(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, client=Non
         sys.exit(1)
 
 def main():
-    from _version import __version__
+    try:
+        from _version import __version__
+    except:
+        __version__ = "develop"
 
     parser = argparse.ArgumentParser(
         description="Get AWS Cloudwatch logs.", epilog="Example:\npython aws_get_logs.py --region <aws_region> --group <log_group_name> --stream <log_stream_name> --output <output_info>", formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -317,6 +348,11 @@ def main():
         "-s", "--stream", required=True, help="AWS CloudWatch log stream."
     )
 
+    parser_stream = subparsers.add_parser('follow-stream', parents=[config], help="Get Cloudwatch logs by a given stream and follow it.")
+    parser_stream.add_argument(
+        "-s", "--stream", required=True, help="AWS CloudWatch log stream."
+    )
+
     parser_insights = subparsers.add_parser('insights', parents=[config], help="Query Cloudwatch logs with an Insight query. Waits up to 3 minutes for the query to finish.")
     parser_insights.add_argument(
         "-q", "--query", default=QUERY_DEFAULT, help="AWS CloudWatch Insights query to run. Waits up to 3 minutes for the query to finish."
@@ -325,6 +361,7 @@ def main():
     args = parser.parse_args()
    
     filter_stream = False
+    follow_stream = False
     insights = False
     recent_streams = False
 
@@ -356,6 +393,13 @@ def main():
         else:
             log_stream = args.stream
     
+    if args.subcommand == "follow-stream":
+        follow_stream = True
+        if LOG_STREAM:
+            log_stream = LOG_STREAM
+        else:
+            log_stream = args.stream
+    
     if args.subcommand == "insights":
         insights = True
         query = args.query
@@ -367,6 +411,11 @@ def main():
         print(*result, sep = "\n")
     elif filter_stream:
         print(get_logs_filter_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, limit=limit, client=log_client, debug=debug))
+    elif follow_stream:
+        try:
+            get_logs_filter_streams_follow(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, limit=limit, client=log_client, debug=debug)
+        except (KeyboardInterrupt) as e:
+            print("Stopped.")
     elif recent_streams:
         print(show_most_recent_log_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, limit=limit, client=log_client, debug=debug))
 

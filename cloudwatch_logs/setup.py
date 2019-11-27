@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
 from setuptools import setup, find_packages
+from _version import __version__
 
 setup(
     name="aws_get_logs",
-    version="0.0.1",
+    version=__version__,
     description="Get logs from AWS Cloudwatch.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
@@ -16,7 +17,7 @@ setup(
     packages=find_packages(exclude=["tests*"]),
     install_requires=["boto3>=1.10.25"],
     extras_require={"test": ["mock", "pytest"]},
-    # scripts=["bin/servicedb"],
+    scripts=["bin/aws_get_logs"],
     # entry_points={
     #     "console_scripts": [
     #         "dynamodb=dynamodb:main",
