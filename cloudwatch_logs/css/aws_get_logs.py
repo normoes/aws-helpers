@@ -117,49 +117,47 @@ def show_most_recent_log_streams(log_group=LOG_GROUP, client=None):
             
 
 @init_log_message
-def get_logs_filter_streams(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, start_time_offset=START_TIME, time_unit=TIME_UNIT, client=None, debug=False):
+def get_logs_filter_streams(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, start_time_offset=START_TIME, time_unit=TIME_UNIT, follow=False, client=None, debug=False):
     next_token = "first"
     start_time, end_time = make_time(start_time_offset, time_unit=time_unit)
     parameters = {"logGroupName": log_group, "logStreamNamePrefix": log_stream, "limit": limit, "startTime": start_time, "endTime": end_time}
-    timestamps = list()
-    searched_log_streams = list()
-    while next_token:
+    if follow:
+        start_time = int(datetime.timestamp(datetime.utcnow())) * 1000
+        create_new_start_time = False
+    while True if follow else next_token:
         try:
+            if not next_token and follow:
+                create_new_start_time = True
+                end_time = int(datetime.timestamp(datetime.utcnow())) * 1000
+                parameters.update({"endTime": end_time})
+                parameters.update({"startTime": start_time - 1})
+
+
             response = client.filter_log_events(**parameters)
-            print(json.dumps(response, indent=4))
 
             if response:
-                log_streams = response.get("searchedLogStreams", dict())
-                searched_log_streams.append(log_streams)
                 next_token = response.get("nextToken", "")
                 if next_token:
-                    parameter_next_token = {"nextToken": next_token}
-                    parameters.update(parameter_next_token)
+                    parameters.update({"nextToken": next_token})
                 else:
                     parameters.pop("nextToken", None)
-                # print(f"nextToken: {next_token}")
                 log_events = response.get("events", list())
-                # print(len(log_events))
+                if follow:
+                    if log_events:
+                        if create_new_start_time:
+                            create_new_start_time = not create_new_start_time
+                            start_time = int(datetime.timestamp(datetime.utcnow())) * 1000
                 for log_event in log_events:
                     log_stream_name = log_event.get("logStreamName", None)
-                    timestamps.append(log_event.get("timestamp", -1))
-                    {"timestamp":log_event.get("timestamp", -1), "message": log_event.get("message", "")}
-                    # most_recent_logs[log_stream_name].append({"timestamp":log_event.get("timestamp", -1), "message": log_event.get("message", "")})
+                    timestamp = log_event.get("timestamp", -1)
+                    message = log_event.get("message", "")
+                    yield message
         except (client.exceptions.InvalidParameterException) as e:
             logger.error(f"Wrong parameters with log group '{log_group}'. Error: {str(e)}")
             sys.exit(1)
         except (client.exceptions.ResourceNotFoundException) as e:
             logger.error(f"Did not find log group '{log_group}'. Error: {str(e)}")
             sys.exit(1)
-
-    if debug:
-       if timestamps:
-           sorted_timestamps = sorted(timestamps)
-           print(f"given start_time '{datetime.fromtimestamp(start_time/1000)}' :: first log event at '{datetime.fromtimestamp(sorted_timestamps[0]/1000)}'")
-           print(f"given end_time '{datetime.fromtimestamp(end_time/1000)}' :: last log event at '{datetime.fromtimestamp(sorted_timestamps[-1]/1000)}'")
-       if searched_log_streams:
-           print(searched_log_streams)
-    print()
             
 
 @init_log_message
@@ -393,10 +391,16 @@ def main():
         result = get_logs_using_insights(log_group=log_group, start_time_offset=start_time, time_unit=time_unit, limit=limit, query=query, client=log_client)
         print(*result, sep = "\n")
     elif get_stream:
-        print(get_logs_filter_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, client=log_client, debug=debug))
+        # print(get_logs_filter_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, client=log_client, debug=debug))
+        try:
+            for message in get_logs_filter_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, follow=False, client=log_client, debug=debug):
+                print(message)
+        except (KeyboardInterrupt) as e:
+            print("Stopped.")
     elif follow_stream:
         try:
-            for message in get_logs_filter_streams_follow(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, client=log_client, debug=debug):
+            # for message in get_logs_filter_streams_follow(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, client=log_client, debug=debug):
+            for message in get_logs_filter_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, follow=True, client=log_client, debug=debug):
                 print(message)
         except (KeyboardInterrupt) as e:
             print("Stopped.")
