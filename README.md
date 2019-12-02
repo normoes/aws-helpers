@@ -93,23 +93,8 @@ The default output of the subcommand `by-service-dns` is the instance's private 
 
 `aws_get_logs.py`
 
-This is work in progress.
+Have a look [here](./cloudwatch_logs/README.md).
 
-## Why
-
-There are tools  like `saw`, but I am not quite comfortable with all of them. So I just wanted to try and do it myself.
-
-## How
-
-This project uses `boto3`.
-
-## Usage
-
-Up to now, it's possible to use the following sub commands.
-* `filter-stream` - Get Cloudwatch logs by a given stream.
-* `insights` - Query Cloudwatch logs with an Insight query. Waits up to 3 minutes for the query to finish.
-
-`--debug` shows additional output in order to see what's going on.
 ## list_chamber_services
 
 `aws-ssm-pstore`

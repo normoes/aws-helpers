@@ -14,6 +14,7 @@ setup(
     maintainer="Norman Moeschter-Schenck",
     maintainer_email="<norman.moeschter@gmail.com>",
     url="https://github.com/normoes/aws-helpers/tree/master/cloudwatch_logs",
+    download_url=f"https://github.com/normoes/aws-helpers/archive/{__version__}.tar.gz",
     packages=find_packages(exclude=["tests*"]),
     install_requires=["boto3>=1.10.25"],
     extras_require={"test": ["mock", "pytest"]},

@@ -7,36 +7,18 @@ Goal:
 How to:
   * Get help
     - aws_get_logs.py -h
-  * By service DNS name:
-    - Getting information by a service's DNS name (AWS Route53), the tool gets the IP from this dns name and searches this IP in the list of private IPs in all the given cluster's instances.
-    - aws_get_instance_service_runs_on.py by-service-dns -h
-    - python aws_get_instance_service_runs_on.py by-service-dns --region <aws_region> --cluster <ecs_cluster_name> --dns <service_dns_name> --output <output_info>
-  * By service name:
-    - Getting the instance id by a service's name (ECS service), the tool connects to every cluster instance using AWS SSM (requires 'ssm-agent' on every instance, requires 'AWS Session Manager Plugin' locally) and returns the instance's id if the service can be found. The service is checked using regular expressions, so not the complete service name needs to be known, but the tool stops at the first match.
-    - Services are found by checking running docker containerson the instances.
-    - aws_get_instance_service_runs_on.py by-service-name -h
-    - python aws_get_instance_service_runs_on.py by-service-name --region <aws_region> --cluster <ecs_cluster_name> --name <service_name>
-    - The tool also can list every running service running:
-    - python aws_get_instance_service_runs_on.py by-service-name --region <aws_region> --cluster <ecs_cluster_name> --list
-  * List instance ids:
-    - It's possible to list every available instance id in the cluster.
-    - python aws_get_instance_service_runs_on.py instance-ids
-  * The tool should be used in combination with aws-vault. It uses boto3 and only works with valid AWS credentials.
-  * The AWS region can be given as environemnt variable REGION
-  * The AWS region can be given as argument (-r, --region)
-  * If the AWS region is set both ways, REGION has precedence.
-  * The ECS cluster can be given as environemnt variable CLUSTER_NAME
-  * The ECS cluster can be given as argument (-c, --cluster)
-  * If the ECS cluster is set both ways, CLUSTER_NAME has precedence.
-  * The service's dns name can be given as environemnt variable SERVICE_DNS
-  * The service's dns name can be given as argument (-d, --dns)
-  * If the service's dns name is set both ways, SERVICE_DNS has precedence.
-  * The oputput info can be given as environemnt variable OUTPUT_INFO
-  * The output info can be given as argument (-o, --output)
-  * If the output info  is set both ways, OUTPUT_INFO has precedence.
-  * The service's name can be given as environemnt variable SERVICE_NAME
-  * The service's name can be given as argument (-n, --name)
-  * If the service's name is set both ways, SERVICE_NAME has precedence.
+  * Filter a log stream:
+    - Get the most recent log events from the given log stream.
+    - aws_get_logs get-stream -h
+    - python aws_get_logs.py get-stream --region <aws_region> --group <log_group> --stream <log_stream_prefix>  --start-time 24 --time-unit "hours" --limit 30
+  * Follow a log stream:
+    - Get the most recent log events from the given log stream and keep on listening.
+    - aws_get_logs follow-stream -h
+    - python aws_get_logs.py get-stream --region <aws_region> --group <log_group> --stream <log_stream_prefix>  --start-time 24 --time-unit "hours" --limit 30
+  * Query log events:
+    - It's possiblet o query log events using AWS CloudWatch Insights.
+    - aws_get_logs insights -h
+    - python aws_get_logs.py insights --region <aws_region> --group <log_group> --start_time 1 --limit 1000 --query 'fields @timestamp, @message | sort @timestamp desc | limit 20'
 """
 
 import os
@@ -59,6 +41,7 @@ logger.setLevel(logging.INFO)
 
 REGION_DEFAULT = "eu-west-1"
 START_TIME_DEFAULT = 3
+TIME_UNIT_DEFAULT = "hours"
 LIMIT_DEFAULT = 20
 QUERY_DEFAULT = "fields @timestamp, @message | sort @timestamp desc | limit 20"
 
@@ -66,6 +49,7 @@ REGION = os.environ.get("AWS_REGION", REGION_DEFAULT)
 LOG_GROUP = os.environ.get("LOG_GROUP", None)
 LOG_STREAM = os.environ.get("LOG_STREAM", None)
 START_TIME = os.environ.get("START_TIME", START_TIME_DEFAULT)
+TIME_UNIT = os.environ.get("TIME_UNIT", TIME_UNIT_DEFAULT)
 LIMIT = os.environ.get("LIMIT", LIMIT_DEFAULT)
 QUERY = os.environ.get("QUERY", QUERY_DEFAULT)
 
@@ -74,14 +58,15 @@ def init_log_message(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         start_time_offset = kwargs.get("start_time_offset", None)
+        time_unit = kwargs.get("time_unit", None)
         limit = kwargs.get("limit", None)
-        logger.info(f"Going '{start_time_offset} hours' back in time.")
+        logger.info(f"Going '{start_time_offset} {time_unit}' back in time.")
         logger.info(f"Limiting results to '{limit}'.")
         return func(*args, **kwargs)
     return wrapper
     
 
-def make_time(start_time_offset:int=0):
+def make_time(start_time_offset:int=START_TIME_DEFAULT, time_unit=TIME_UNIT_DEFAULT):
     """Create query start and end times.
 
     The end_time is now.
@@ -91,7 +76,8 @@ def make_time(start_time_offset:int=0):
     """
 
     end_time = datetime.utcnow()
-    start_time = end_time - timedelta(hours=start_time_offset)
+    start_time_dict = {time_unit: start_time_offset}
+    start_time = end_time - timedelta(**start_time_dict)
     end_time = int(datetime.timestamp(end_time)) * 1000
     start_time = int(datetime.timestamp(start_time) * 1000)
     return start_time, end_time
@@ -131,9 +117,9 @@ def show_most_recent_log_streams(log_group=LOG_GROUP, client=None):
             
 
 @init_log_message
-def get_logs_filter_streams(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, start_time_offset=START_TIME, client=None, debug=False):
+def get_logs_filter_streams(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, start_time_offset=START_TIME, time_unit=TIME_UNIT, client=None, debug=False):
     next_token = "first"
-    start_time, end_time = make_time(start_time_offset)
+    start_time, end_time = make_time(start_time_offset, time_unit=time_unit)
     parameters = {"logGroupName": log_group, "logStreamNamePrefix": log_stream, "limit": limit, "startTime": start_time, "endTime": end_time}
     timestamps = list()
     searched_log_streams = list()
@@ -177,24 +163,17 @@ def get_logs_filter_streams(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LI
             
 
 @init_log_message
-def get_logs_filter_streams_follow(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, start_time_offset=START_TIME, client=None, debug=False):
+def get_logs_filter_streams_follow(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, start_time_offset=START_TIME, time_unit=TIME_UNIT, client=None, debug=False):
     next_token = "first"
-    start_time, end_time = make_time(start_time_offset)
+    start_time, end_time = make_time(start_time_offset, time_unit=time_unit)
     parameters = {"logGroupName": log_group, "logStreamNamePrefix": log_stream, "limit": limit, "startTime": start_time, "endTime": end_time}
-    timestamps = list()
-    searched_log_streams = list()
     while True:
         try:
             response = client.filter_log_events(**parameters)
-            # print(json.dumps(response, indent=4))
-
             if response:
-                log_streams = response.get("searchedLogStreams", dict())
-                searched_log_streams.append(log_streams)
                 next_token = response.get("nextToken", "")
                 if next_token:
-                    parameter_next_token = {"nextToken": next_token}
-                    parameters.update(parameter_next_token)
+                    parameters.update({"nextToken": next_token})
                 else:
                     parameters.pop("nextToken", None)
                 log_events = response.get("events", list())
@@ -202,7 +181,7 @@ def get_logs_filter_streams_follow(log_group=LOG_GROUP, log_stream=LOG_STREAM, l
                     log_stream_name = log_event.get("logStreamName", None)
                     timestamp = log_event.get("timestamp", -1)
                     message = log_event.get("message", "")
-                    print(message)
+                    yield message
         except (botocore.errorfactory.ClientError) as e:
             error_code = e.response["Error"]["Code"]
             if error_code == "InvalidParameterException":
@@ -214,8 +193,8 @@ def get_logs_filter_streams_follow(log_group=LOG_GROUP, log_stream=LOG_STREAM, l
 
 
 @init_log_message
-def get_logs_using_insights(log_group=LOG_GROUP, query=QUERY, limit=LIMIT, start_time_offset=START_TIME, client=None):
-    start_time, end_time = make_time(start_time_offset)
+def get_logs_using_insights(log_group=LOG_GROUP, query=QUERY, limit=LIMIT, start_time_offset=START_TIME, time_unit=TIME_UNIT, client=None):
+    start_time, end_time = make_time(start_time_offset, time_unit=time_unit)
     parameters = {"logGroupName": log_group, "startTime": start_time, "endTime": end_time, "queryString": query, "limit": limit}
     most_recent_log_streams = list()
     logger.info(f"Starting query '{parameters['queryString']}'")
@@ -330,7 +309,10 @@ def main():
         "-g", "--group", required=True, help="AWS CloudWatch log group."
     )
     config.add_argument(
-        "--start-time", default=START_TIME_DEFAULT, type=int, help="AWS CloudWatch log events start time, for now in hours only."
+        "--start-time", default=START_TIME_DEFAULT, type=int, help="AWS CloudWatch log events start time, default value in hours. See '--time-unit'."
+    )
+    config.add_argument(
+        "--time-unit", default=TIME_UNIT_DEFAULT, const=TIME_UNIT_DEFAULT, nargs="?", choices=("hours", "minutes"), type=str, help="Time unit when processing the value of '--start-time'."
     )
     config.add_argument(
         "--limit", default=LIMIT_DEFAULT, type=int, help="AWS CloudWatch log events query result limit."
@@ -343,7 +325,7 @@ def main():
     subparsers.required = True
 
     # create the parser for the "a" command
-    parser_stream = subparsers.add_parser('filter-stream', parents=[config], help="Get Cloudwatch logs by a given stream.")
+    parser_stream = subparsers.add_parser('get-stream', parents=[config], help="Get Cloudwatch logs by a given stream.")
     parser_stream.add_argument(
         "-s", "--stream", required=True, help="AWS CloudWatch log stream."
     )
@@ -360,7 +342,7 @@ def main():
     
     args = parser.parse_args()
    
-    filter_stream = False
+    get_stream = False
     follow_stream = False
     insights = False
     recent_streams = False
@@ -383,11 +365,12 @@ def main():
         log_group = args.group
 
     start_time = args.start_time
+    time_unit = args.time_unit
 
     limit = args.limit
     
-    if args.subcommand == "filter-stream":
-        filter_stream = True
+    if args.subcommand == "get-stream":
+        get_stream = True
         if LOG_STREAM:
             log_stream = LOG_STREAM
         else:
@@ -407,13 +390,14 @@ def main():
     #     show_most_recent_log_streams(log_group=log_group, client=log_client)
     # print(get_logs(log_group=log_group, log_stream=log_stream, client=log_client))
     if insights:
-        result = get_logs_using_insights(log_group=log_group, start_time_offset=start_time, limit=limit, query=query, client=log_client)
+        result = get_logs_using_insights(log_group=log_group, start_time_offset=start_time, time_unit=time_unit, limit=limit, query=query, client=log_client)
         print(*result, sep = "\n")
-    elif filter_stream:
-        print(get_logs_filter_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, limit=limit, client=log_client, debug=debug))
+    elif get_stream:
+        print(get_logs_filter_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, client=log_client, debug=debug))
     elif follow_stream:
         try:
-            get_logs_filter_streams_follow(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, limit=limit, client=log_client, debug=debug)
+            for message in get_logs_filter_streams_follow(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, client=log_client, debug=debug):
+                print(message)
         except (KeyboardInterrupt) as e:
             print("Stopped.")
     elif recent_streams:
