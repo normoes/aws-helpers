@@ -31,9 +31,7 @@ import sys
 import functools
 import json
 from time import sleep
-import re
 from datetime import datetime, timedelta
-from collections import defaultdict
 
 logging.basicConfig()
 logger = logging.getLogger("AWSGetLogs")
@@ -57,9 +55,9 @@ QUERY = os.environ.get("QUERY", QUERY_DEFAULT)
 def init_log_message(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        start_time_offset = kwargs.get("start_time_offset", None)
-        time_unit = kwargs.get("time_unit", None)
-        limit = kwargs.get("limit", None)
+        start_time_offset = kwargs.get("start_time_offset", START_TIME_DEFAULT)
+        time_unit = kwargs.get("time_unit", TIME_UNIT_DEFAULT)
+        limit = kwargs.get("limit", LIMIT_DEFAULT)
         logger.info(f"Going '{start_time_offset} {time_unit}' back in time.")
         logger.info(f"Limiting results to '{limit}'.")
         return func(*args, **kwargs)
@@ -84,10 +82,10 @@ def make_time(start_time_offset:int=START_TIME_DEFAULT, time_unit=TIME_UNIT_DEFA
 
 
 @init_log_message
-def show_most_recent_log_streams(log_group=LOG_GROUP, client=None):
+def show_most_recent_log_streams(log_group=LOG_GROUP, client=None, debug=False):
     next_token = "first"
     parameters = {"logGroupName": log_group, "orderBy":"LastEventTime"}
-    most_recent_log_streams = list()
+    most_recent_log_streams = []
     while next_token:
         try:
             response = client.describe_log_streams(**parameters)
@@ -99,7 +97,7 @@ def show_most_recent_log_streams(log_group=LOG_GROUP, client=None):
                 else:
                     parameters.pop("nextToken", None)
                 print(f"nextToken: {next_token}")
-                log_streams = response.get("logStreams", list())
+                log_streams = response.get("logStreams", [])
                 for log_stream in log_streams:
                     log_stream_name = log_stream.get("logStreamName", None)
                     if log_stream_name and not log_stream_name in most_recent_log_streams:
@@ -107,12 +105,18 @@ def show_most_recent_log_streams(log_group=LOG_GROUP, client=None):
                 print(json.dumps(response, indent=4))
             else:
                 print(f"No response received")
-        except (client.exceptions.InvalidParameterException) as e:
-            logger.error(f"Wrong parameters with log group '{log_group}'. Error: {str(e)}")
+        except (botocore.errorfactory.ClientError) as e:
+            error_code = e.response["Error"]["Code"]
+            if error_code == "NoCredentialsError":
+                logger.error(f"Could not find AWS credentials. Error: {str(e)}.")
+            elif error_code == "InvalidParameterException":
+                logger.error(f"Wrong parameters with log group '{log_group}'. Error: {str(e)}.")
+            elif error_code == "ResourceNotFoundException":
+                logger.error(f"Did not find log group '{log_group}' with log stream '{log_stream}'. Error: {str(e)}.")
+            else:
+                logger.error(f"Error: {str(e)}.")
             sys.exit(1)
-        except (client.exceptions.ResourceNotFoundException) as e:
-            logger.error(f"Did not find log group '{log_group}'. Error: {str(e)}")
-            sys.exit(1)
+
     print(f"No streams found with log group '{log_group}'")
             
 
@@ -122,7 +126,7 @@ def get_logs_filter_streams(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LI
     start_time, end_time = make_time(start_time_offset, time_unit=time_unit)
     parameters = {"logGroupName": log_group, "logStreamNamePrefix": log_stream, "limit": limit, "startTime": start_time, "endTime": end_time}
     if follow:
-        start_time = int(datetime.timestamp(datetime.utcnow())) * 1000
+        start_time = end_time
         create_new_start_time = False
     while True if follow else next_token:
         try:
@@ -141,40 +145,12 @@ def get_logs_filter_streams(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LI
                     parameters.update({"nextToken": next_token})
                 else:
                     parameters.pop("nextToken", None)
-                log_events = response.get("events", list())
+                log_events = response.get("events", [])
                 if follow:
                     if log_events:
                         if create_new_start_time:
                             create_new_start_time = not create_new_start_time
-                            start_time = int(datetime.timestamp(datetime.utcnow())) * 1000
-                for log_event in log_events:
-                    log_stream_name = log_event.get("logStreamName", None)
-                    timestamp = log_event.get("timestamp", -1)
-                    message = log_event.get("message", "")
-                    yield message
-        except (client.exceptions.InvalidParameterException) as e:
-            logger.error(f"Wrong parameters with log group '{log_group}'. Error: {str(e)}")
-            sys.exit(1)
-        except (client.exceptions.ResourceNotFoundException) as e:
-            logger.error(f"Did not find log group '{log_group}'. Error: {str(e)}")
-            sys.exit(1)
-            
-
-@init_log_message
-def get_logs_filter_streams_follow(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, start_time_offset=START_TIME, time_unit=TIME_UNIT, client=None, debug=False):
-    next_token = "first"
-    start_time, end_time = make_time(start_time_offset, time_unit=time_unit)
-    parameters = {"logGroupName": log_group, "logStreamNamePrefix": log_stream, "limit": limit, "startTime": start_time, "endTime": end_time}
-    while True:
-        try:
-            response = client.filter_log_events(**parameters)
-            if response:
-                next_token = response.get("nextToken", "")
-                if next_token:
-                    parameters.update({"nextToken": next_token})
-                else:
-                    parameters.pop("nextToken", None)
-                log_events = response.get("events", list())
+                            start_time = end_time
                 for log_event in log_events:
                     log_stream_name = log_event.get("logStreamName", None)
                     timestamp = log_event.get("timestamp", -1)
@@ -182,26 +158,59 @@ def get_logs_filter_streams_follow(log_group=LOG_GROUP, log_stream=LOG_STREAM, l
                     yield message
         except (botocore.errorfactory.ClientError) as e:
             error_code = e.response["Error"]["Code"]
-            if error_code == "InvalidParameterException":
-                logger.error(f"Wrong parameters with log group '{log_group}'. Error: {str(e)}.")
-                sys.exit(1)
+            if error_code == "NoCredentialsError":
+                logger.error(f"Could not find AWS credentials. Error: {str(e)}.")
+            elif error_code == "InvalidParameterException":
+                logger.error(f"Wrong parameters with log group '{log_group}' and log stream '{log_stream}'. Error: {str(e)}.")
             elif error_code == "ResourceNotFoundException":
-                logger.error(f"Did not find log group '{log_group}'. Error: {str(e)}.")
-                sys.exit(1)
+                logger.error(f"Did not find log group '{log_group}' with log stream '{log_stream}'. Error: {str(e)}.")
+            else:
+                logger.error(f"Error: {str(e)}.")
+            sys.exit(1)
+            
+
+# @init_log_message
+# def get_logs_filter_streams_follow(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, start_time_offset=START_TIME, time_unit=TIME_UNIT, client=None, debug=False):
+#     next_token = "first"
+#     start_time, end_time = make_time(start_time_offset, time_unit=time_unit)
+#     parameters = {"logGroupName": log_group, "logStreamNamePrefix": log_stream, "limit": limit, "startTime": start_time, "endTime": end_time}
+#     while True:
+#         try:
+#             response = client.filter_log_events(**parameters)
+#             if response:
+#                 next_token = response.get("nextToken", "")
+#                 if next_token:
+#                     parameters.update({"nextToken": next_token})
+#                 else:
+#                     parameters.pop("nextToken", None)
+#                 log_events = response.get("events", [])
+#                 for log_event in log_events:
+#                     log_stream_name = log_event.get("logStreamName", None)
+#                     timestamp = log_event.get("timestamp", -1)
+#                     message = log_event.get("message", "")
+#                     yield message
+#         except (botocore.errorfactory.ClientError) as e:
+#             error_code = e.response["Error"]["Code"]
+#             if error_code == "InvalidParameterException":
+#                 logger.error(f"Wrong parameters with log group '{log_group}'. Error: {str(e)}.")
+#                 sys.exit(1)
+#             elif error_code == "ResourceNotFoundException":
+#                 logger.error(f"Did not find log group '{log_group}'. Error: {str(e)}.")
+#                 sys.exit(1)
 
 
 @init_log_message
 def get_logs_using_insights(log_group=LOG_GROUP, query=QUERY, limit=LIMIT, start_time_offset=START_TIME, time_unit=TIME_UNIT, client=None):
     start_time, end_time = make_time(start_time_offset, time_unit=time_unit)
     parameters = {"logGroupName": log_group, "startTime": start_time, "endTime": end_time, "queryString": query, "limit": limit}
-    most_recent_log_streams = list()
+    most_recent_log_streams = []
     logger.info(f"Starting query '{parameters['queryString']}'")
     query_id = ""
-    result = list()
+    result = []
     try:
         response = client.start_query(**parameters)
         if response:
-            log_streams = response.get("logStreams", list())
+            log_streams = response.get("logStreams", [])
             for log_stream in log_streams:
                 log_stream_name = log_stream.get("logStreamName", None)
                 if log_stream_name and not log_stream_name in most_recent_log_streams:
@@ -213,16 +222,17 @@ def get_logs_using_insights(log_group=LOG_GROUP, query=QUERY, limit=LIMIT, start
             print(f"No response received")
     except (botocore.errorfactory.ClientError) as e:
         error_code = e.response["Error"]["Code"]
-        if error_code == "MalformedQueryException":
+        if error_code == "NoCredentialsError":
+            logger.error(f"Could not find AWS credentials. Error: {str(e)}.")
+        elif error_code == "MalformedQueryException":
             logger.error(f"Error in query '{parameters['queryString']}'. Error: {str(e)}")
-            sys.exit(1)
         elif error_code == "InvalidParameterException":
-            logger.error(f"Wrong parameters with log group '{log_group}'. Error: {str(e)}")
-            sys.exit(1)
+            logger.error(f"Wrong parameters with log group '{log_group}' and log stream '{log_stream}'. Error: {str(e)}")
         elif error_code == "ResourceNotFoundException":
-            logger.error(f"Did not find log group '{log_group}'. Error: {str(e)}")
-            sys.exit(1)
-        logger.error(f"Error 'str(e)'")
+            logger.error(f"Did not find log group '{log_group}' with log stream '{log_stream}'. Error: {str(e)}")
+        else:
+            logger.error(f"Error: 'str(e)'")
+        sys.exit(1)
 
     status = ""
     try:
@@ -235,8 +245,6 @@ def get_logs_using_insights(log_group=LOG_GROUP, query=QUERY, limit=LIMIT, start
             response = client.get_query_results(
                 queryId=query_id
             )
-            # print(json.dumps(response, indent=4))
-
             # Possible query status values
             # 'Scheduled'|'Running'|'Complete'|'Failed'|'Cancelled'
             # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/logs.html#CloudWatchLogs.Client.get_query_results
@@ -250,18 +258,20 @@ def get_logs_using_insights(log_group=LOG_GROUP, query=QUERY, limit=LIMIT, start
             sys.exit(1)
         else:
             # logger.debug(response)
-            result = response.get("results", list())
-            logger.info(f"Number of of events: '{len(result)}'")
+            result = response.get("results", [])
+            logger.info(f"'{len(result)}' events for query '{query}'.")
             return result
     except (botocore.errorfactory.ClientError) as e:
         error_code = e.response["Error"]["Code"]
-        if error_code == "InvalidParameterException":
-            logger.error(f"Wrong parameters with log group '{log_group}'. Error: {str(e)}")
-            sys.exit(1)
+        if error_code == "NoCredentialsError":
+            logger.error(f"Could not find AWS credentials. Error: {str(e)}.")
+        elif error_code == "InvalidParameterException":
+            logger.error(f"Wrong parameters with wuery '{query_id}'. Error: {str(e)}")
         elif error_code == "ResourceNotFoundException":
-            logger.error(f"Did not find log group '{log_group}'. Error: {str(e)}")
-            sys.exit(1)
-        logger.error(f"Error 'str(e)'")
+            logger.error(f"Did not find the query '{query_id}'. Error: {str(e)}")
+        else:
+            logger.error(f"Error: 'str(e)'")
+        sys.exit(1)
 
     print(f"No query result found with log group '{log_group}'")
             
@@ -272,13 +282,19 @@ def get_logs(log_group=LOG_GROUP, log_stream=LOG_STREAM, limit=LIMIT, client=Non
         response = client.get_log_events(
             logGroupName=log_group,
             logStreamName=log_stream,
+            limit=limit,
         )
         return response
-    except (client.exceptions.InvalidParameterException) as e:
-        logger.error(f"Wrong parameters with log group '{log_group}' and log stream '{log_stream}'. Error: {str(e)}")
-        sys.exit(1)
-    except (client.exceptions.ResourceNotFoundException) as e:
-        logger.error(f"Did not find log group '{log_group}' with log stream '{log_stream}'. Error: {str(e)}")
+    except (botocore.errorfactory.ClientError) as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "NoCredentialsError":
+            logger.error(f"Could not find AWS credentials. Error: {str(e)}.")
+        elif error_code == "InvalidParameterException":
+            logger.error(f"Wrong parameters with log group '{log_group}' and log stream '{log_stream}'. Error: {str(e)}")
+        elif error_code == "ResourceNotFoundException":
+            logger.error(f"Did not find log group '{log_group}' with log stream '{log_stream}'. Error: {str(e)}")
+        else:
+            logger.error(f"Error: 'str(e)'")
         sys.exit(1)
 
 def main():
@@ -304,7 +320,7 @@ def main():
     )
 
     config.add_argument(
-        "-g", "--group", required=True, help="AWS CloudWatch log group."
+        "-g", "--group", default=LOG_GROUP, help="AWS CloudWatch log group."
     )
     config.add_argument(
         "--start-time", default=START_TIME_DEFAULT, type=int, help="AWS CloudWatch log events start time, default value in hours. See '--time-unit'."
@@ -325,12 +341,12 @@ def main():
     # create the parser for the "a" command
     parser_stream = subparsers.add_parser('get-stream', parents=[config], help="Get Cloudwatch logs by a given stream.")
     parser_stream.add_argument(
-        "-s", "--stream", required=True, help="AWS CloudWatch log stream."
+        "-s", "--stream", default=LOG_STREAM, help="AWS CloudWatch log stream."
     )
 
     parser_stream = subparsers.add_parser('follow-stream', parents=[config], help="Get Cloudwatch logs by a given stream and follow it.")
     parser_stream.add_argument(
-        "-s", "--stream", required=True, help="AWS CloudWatch log stream."
+        "-s", "--stream", default=LOG_STREAM, help="AWS CloudWatch log stream."
     )
 
     parser_insights = subparsers.add_parser('insights', parents=[config], help="Query Cloudwatch logs with an Insight query. Waits up to 3 minutes for the query to finish.")
@@ -357,10 +373,7 @@ def main():
     session = boto3.session.Session()
     log_client = session.client("logs", region)
 
-    if LOG_GROUP:
-        log_group = LOG_GROUP
-    else:
-        log_group = args.group
+    log_group = args.group
 
     start_time = args.start_time
     time_unit = args.time_unit
@@ -369,29 +382,20 @@ def main():
     
     if args.subcommand == "get-stream":
         get_stream = True
-        if LOG_STREAM:
-            log_stream = LOG_STREAM
-        else:
-            log_stream = args.stream
+        log_stream = args.stream
     
     if args.subcommand == "follow-stream":
         follow_stream = True
-        if LOG_STREAM:
-            log_stream = LOG_STREAM
-        else:
-            log_stream = args.stream
+        log_stream = args.stream
     
     if args.subcommand == "insights":
         insights = True
         query = args.query
-    # if debug:
-    #     show_most_recent_log_streams(log_group=log_group, client=log_client)
-    # print(get_logs(log_group=log_group, log_stream=log_stream, client=log_client))
+
     if insights:
         result = get_logs_using_insights(log_group=log_group, start_time_offset=start_time, time_unit=time_unit, limit=limit, query=query, client=log_client)
         print(*result, sep = "\n")
     elif get_stream:
-        # print(get_logs_filter_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, client=log_client, debug=debug))
         try:
             for message in get_logs_filter_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, follow=False, client=log_client, debug=debug):
                 print(message)
@@ -399,13 +403,12 @@ def main():
             print("Stopped.")
     elif follow_stream:
         try:
-            # for message in get_logs_filter_streams_follow(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, client=log_client, debug=debug):
             for message in get_logs_filter_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, time_unit=time_unit, limit=limit, follow=True, client=log_client, debug=debug):
                 print(message)
         except (KeyboardInterrupt) as e:
             print("Stopped.")
     elif recent_streams:
-        print(show_most_recent_log_streams(log_group=log_group, log_stream=log_stream, start_time_offset=start_time, limit=limit, client=log_client, debug=debug))
+        print(show_most_recent_log_streams(log_group=log_group, client=log_client, debug=debug))
 
 
 

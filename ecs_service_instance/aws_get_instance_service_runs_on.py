@@ -43,13 +43,16 @@ How to:
 
 import os
 import argparse
-import boto3
 import socket
 import logging
 import sys
 import json
 from time import sleep
 import re
+from threading import Thread
+from queue import Queue
+
+import boto3
 
 logging.basicConfig()
 logger = logging.getLogger("AwsGetInstance")
@@ -66,6 +69,8 @@ OUTPUT_INFO = os.environ.get("OUTPUT_INFO", None)
 # By service name
 IGNORED_CONTAINERS = ["ecs-agent"]  # Ignored containers
 IGNORED_NAMES = ["internalecspause"]  # ignored parts of container names
+
+container_queue = Queue()
 
 # Function to display hostname and
 # IP address
@@ -89,7 +94,7 @@ def get_instance_ids_from_cluster(cluster=CLUSTER_NAME, client=None):
         instances = client.describe_container_instances(
             cluster=cluster, containerInstances=container_instances
         )["containerInstances"]
-        instance_ids = list()
+        instance_ids = []
         for instance in instances:
             instance_ids.append(instance.get("ec2InstanceId", None))
         return instance_ids
@@ -107,7 +112,7 @@ def get_instance_info_by_service_dns(instance_ids=None, service_ip="", client=No
         for reservation in reservations:
             instances = reservation["Instances"]
             for instance in instances:
-                network_interfaces = instance.get("NetworkInterfaces", list())
+                network_interfaces = instance.get("NetworkInterfaces", [])
                 for eni in network_interfaces:
                     private_ip_address = eni.get("PrivateIpAddress", None)
                     if service_ip == private_ip_address:
@@ -122,65 +127,92 @@ def get_instance_info_by_service_dns(instance_ids=None, service_ip="", client=No
 
     return instance_private_ip, instance_private_dns, instance_id
 
+def get_containers(instance_id=None, list_services=False):
+    logger.debug(f"Getting info from instance {instance_id}.")
+    try:
+        response = client.send_command(
+            InstanceIds=[instance_id],
+            DocumentName="AWS-RunShellScript",
+            Parameters={"commands": ["sudo docker container ls --format '{{.Names}}'"]}
+        )
+    except (client.exceptions.InvalidInstanceId) as e:
+        logger.error(f"Instance id '{instance_id}' not found. Is the 'ssm-agent' installed? {str(e)}")
+        sys.exit(1)
+        
+    command_id = response["Command"]["CommandId"]
+
+    # Get the result of the above command
+    retries = 10
+    output = None
+    status = None
+    while retries >= 0:
+        retries -= 1
+        sleep(1)
+        result = client.get_command_invocation(
+            InstanceId=instance_id,
+            CommandId=command_id
+        )
+        output = result["StandardOutputContent"]
+        status = result["Status"]
+        
+        logger.debug(f"Waiting for instance '{instance_id}' response. Status is '{status}'.")
+
+        # Possible values for 'Status'
+        # 'Pending'|'InProgress'|'Delayed'|'Success'|'Cancelled'|'TimedOut'|'Failed'|'Cancelling'
+        # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ssm.html#SSM.Client.get_command_invocation
+        if status == "Success":
+            break
+    
+    if not status == "Success":
+        logger.warning(f"Could not contact instance '{instance_id}', status is '{status}'. Is something wrong?")
+        return
+
+    for container_name in output.split():
+        ignore_container = False
+        if not container_name in IGNORED_CONTAINERS:
+            if not list_services:
+                if re.search(service, container_name):
+                    logger.info(f"Instance '{instance_id}' runs container '{container_name}'.")
+                    container_queue.put(container_name)
+                    break
+            else:
+                for ignored_name in IGNORED_NAMES:
+                    if re.search(ignored_name, container_name):
+                        ignore_container = True
+                if not ignore_container:
+                    container_queue.put(container_name)
+    return not list_services
 
 def get_instance_id_by_service_name(region=REGION, instance_ids=None, service="", list_services=False, client=None):
     if list_services:
-        logger.info(f"List deployed/running services.")
+        logger.info(f"List all deployed/running services.")
     else:
         logger.info(f"Get instance of service '{service}'.")
-    container_names = list()
+
+    container_names = []
+
+    if list_services:
+        threads = []
+
     for instance_id in instance_ids:
-        logger.debug(f"Getting info from instance {instance_id}.")
-        try:
-            response = client.send_command(
-                InstanceIds=[instance_id],
-                DocumentName="AWS-RunShellScript",
-                Parameters={"commands": ["sudo docker container ls --format '{{.Names}}'"]}
-            )
-        except (client.exceptions.InvalidInstanceId) as e:
-            logger.error(f"Instance id '{instance_id}' not found. Is the 'ssm-agent' installed? {str(e)}")
-            sys.exit(1)
-            
-        command_id = response["Command"]["CommandId"]
-
-        # Get the result of the above command
-        retries = 10
-        output = None
-        status = None
-        while retries >= 0:
-            retries -= 1
-            sleep(1)
-            result = client.get_command_invocation(
-                InstanceId=instance_id,
-                CommandId=command_id
-            )
-            output = result["StandardOutputContent"]
-            status = result["Status"]
-            
-            logger.debug(f"Waiting for instance '{instance_id}' response. Status is '{status}'.")
-
-            # Possible values for 'Status'
-            # 'Pending'|'InProgress'|'Delayed'|'Success'|'Cancelled'|'TimedOut'|'Failed'|'Cancelling'
-            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ssm.html#SSM.Client.get_command_invocation
-            if status == "Success":
+        if list_services:
+            thread = Thread(target=get_containers, kwargs={"instance_id": instance_id, "list_services": list_services,})
+            thread.daemon = True
+            thread.start()
+            threads.append(thread)
+        else:
+            if get_containers(instance_id=instance_id, list_services=list_services):
                 break
-        
-        if not status == "Success":
-            logger.warning(f"Could not contact instance '{instance_id}', status is '{status}'. Is something wrong?")
 
-        for container_name in output.split():
-            if not container_name in IGNORED_CONTAINERS:
-                if not list_services:
-                    if re.search(service, container_name):
-                        logger.info(f"Instance '{instance_id}' runs container '{container_name}'.")
-                        print(instance_id)
-                        return
-                else:
-                    container_names.append(container_name)
-                    for ignored_name in IGNORED_NAMES:
-                        if re.search(ignored_name, container_name):
-                            del container_names[-1]
-    if not list_services:
+    if list_services:
+        for thread in threads:
+            thread.join()  # wait for end of threads
+
+    while not container_queue.empty():
+        container_names.append(container_queue.get())
+        container_queue.task_done()
+
+    if not container_names and not list_services:
         logger.error(f"Service '{service}' not found.")
     else:
         print("\n".join(container_names))
