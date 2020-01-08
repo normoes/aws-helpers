@@ -14,7 +14,7 @@ How to:
   * Follow a log stream:
     - Get the most recent log events from the given log stream and keep on listening.
     - aws_get_logs follow-stream -h
-    - python aws_get_logs.py get-stream --region <aws_region> --group <log_group> --stream <log_stream_prefix>  --start-time 24 --time-unit "hours" --limit 30
+    - python aws_get_logs.py follow-stream --region <aws_region> --group <log_group> --stream <log_stream_prefix>  --start-time 24 --time-unit "hours" --limit 30
   * Query log events:
     - It's possiblet o query log events using AWS CloudWatch Insights.
     - aws_get_logs insights -h

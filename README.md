@@ -2,7 +2,7 @@
 
 ## ecs_service_instance
 
-`aws_get_instance_service_runs_on.py`
+`ecs_service_instance/aws_get_instance_service_runs_on.py`
 
 ### Why
 I would like to easily ssh into the instance an ECS service is running on. When deployed into a cluster with several instances you cannot accomplish this using `awscli`.
@@ -70,7 +70,7 @@ Here you can find further examples of how to use this tool:
 ```
 # List all instance IDs in cluster
 python /path/to/aws_get_instance_service_runs_on.py instance-ids --region eu-west-2 --cluster my-cluster
-# List all service names
+# List all service names deployed in the cluster
 python /path/to/aws_get_instance_service_runs_on.py by-service-name --region eu-west-2 --cluster my-cluster --list
 ```
 

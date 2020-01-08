@@ -2,7 +2,7 @@
 
 """
 Goal:
-  * Get instance information (ip, id, dns) by a service's.
+  * Get instance information (ip, id, dns) by a service's full DNS name or part of the service's name.
   * List all instance ids in a cluster.
   * list all services in a cluster.
 
@@ -127,7 +127,7 @@ def get_instance_info_by_service_dns(instance_ids=None, service_ip="", client=No
 
     return instance_private_ip, instance_private_dns, instance_id
 
-def get_containers(instance_id=None, list_services=False):
+def get_containers(instance_id=None, service="", list_services=False, client=None):
     logger.debug(f"Getting info from instance {instance_id}.")
     try:
         response = client.send_command(
@@ -170,10 +170,11 @@ def get_containers(instance_id=None, list_services=False):
     for container_name in output.split():
         ignore_container = False
         if not container_name in IGNORED_CONTAINERS:
+            logger.debug(f"Checking container '{container_name}' on instance '{instance_id}'.")
             if not list_services:
                 if re.search(service, container_name):
                     logger.info(f"Instance '{instance_id}' runs container '{container_name}'.")
-                    container_queue.put(container_name)
+                    container_queue.put(instance_id)
                     break
             else:
                 for ignored_name in IGNORED_NAMES:
@@ -181,7 +182,8 @@ def get_containers(instance_id=None, list_services=False):
                         ignore_container = True
                 if not ignore_container:
                     container_queue.put(container_name)
-    return not list_services
+
+    return container_queue.qsize()
 
 def get_instance_id_by_service_name(region=REGION, instance_ids=None, service="", list_services=False, client=None):
     if list_services:
@@ -196,12 +198,14 @@ def get_instance_id_by_service_name(region=REGION, instance_ids=None, service=""
 
     for instance_id in instance_ids:
         if list_services:
-            thread = Thread(target=get_containers, kwargs={"instance_id": instance_id, "list_services": list_services,})
+            # It's to start threads, since we need to check all instances.
+            thread = Thread(target=get_containers, kwargs={"instance_id": instance_id, "service": service, "list_services": list_services, "client": client,})
             thread.daemon = True
             thread.start()
             threads.append(thread)
         else:
-            if get_containers(instance_id=instance_id, list_services=list_services):
+            # Not using threaded approach, since the loop is exited as soon as the service is found.
+            if get_containers(instance_id=instance_id, service=service, list_services=list_services, client=client):
                 break
 
     if list_services:
@@ -221,6 +225,7 @@ def main():
     """
     
     """
+
     from _version import __version__
 
     parser = argparse.ArgumentParser(
