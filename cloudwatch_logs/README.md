@@ -35,7 +35,7 @@ The `--limit` option actually affects the total number if log events returned.
 ### Follow the most recent log events of a stream
 ```
     # Get log events going 1 hour back in time, follow the log stream and listen for more.
-    aws_get_logs follow-stream --region <aws_region> --group <log_group> --stream <log_stream_prefix>  --start-time 1 
+    aws_get_logs follow-stream --region <aws_region> --group <log_group> --stream <log_stream_prefix>  --start-time 1
 ```
 
 This is mostly the same as  the above. It returns the most recent logevents of the given stream, but stays "connected" and gives every new incoming log event as well.
@@ -46,7 +46,7 @@ Requests will be repeated (the stream is followed) until the program stops.
 
 ### Using Insights
 ```
-    aws_get_logs insights --region <aws_region> --group <log_group> --start_time 1 --limit 1000 --query 'fields @timestamp, @message | sort @timestamp desc | limit 20' 
+    aws_get_logs insights --region <aws_region> --group <log_group> --start_time 1 --limit 1000 --query 'fields @timestamp, @message | sort @timestamp desc | limit 20'
 ```
 
 This command allows querying AWS CloudWatch logs using Insights.
@@ -85,4 +85,3 @@ Also, there is a `--limit` option which limits the result per request.
 
 The given log stream name is evaluated using the option `logStreamNamePrefix` of the `filter_log_events` function of the **boto3** logs client.
 I.e. it's not important to specifiy the complete and exact log stream name, but an **exact prefix**.
-

@@ -103,7 +103,9 @@ def get_instance_ids_from_cluster(cluster=CLUSTER_NAME, client=None):
         sys.exit(1)
 
 
-def get_instance_info_by_service_dns(instance_ids=None, service_ip="", client=None):
+def get_instance_info_by_service_dns(
+    instance_ids=None, service_ip="", client=None
+):
     instance_private_ip = instance_private_dns = instance_id = ""
     if instance_ids and service_ip:
         reservations = client.describe_instances(InstanceIds=instance_ids)[
@@ -127,18 +129,25 @@ def get_instance_info_by_service_dns(instance_ids=None, service_ip="", client=No
 
     return instance_private_ip, instance_private_dns, instance_id
 
-def get_containers(instance_id=None, service="", list_services=False, client=None):
+
+def get_containers(
+    instance_id=None, service="", list_services=False, client=None
+):
     logger.debug(f"Getting info from instance {instance_id}.")
     try:
         response = client.send_command(
             InstanceIds=[instance_id],
             DocumentName="AWS-RunShellScript",
-            Parameters={"commands": ["sudo docker container ls --format '{{.Names}}'"]}
+            Parameters={
+                "commands": ["sudo docker container ls --format '{{.Names}}'"]
+            },
         )
     except (client.exceptions.InvalidInstanceId) as e:
-        logger.error(f"Instance id '{instance_id}' not found. Is the 'ssm-agent' installed? {str(e)}")
+        logger.error(
+            f"Instance id '{instance_id}' not found. Is the 'ssm-agent' installed? {str(e)}"
+        )
         sys.exit(1)
-        
+
     command_id = response["Command"]["CommandId"]
 
     # Get the result of the above command
@@ -149,31 +158,38 @@ def get_containers(instance_id=None, service="", list_services=False, client=Non
         retries -= 1
         sleep(1)
         result = client.get_command_invocation(
-            InstanceId=instance_id,
-            CommandId=command_id
+            InstanceId=instance_id, CommandId=command_id
         )
         output = result["StandardOutputContent"]
         status = result["Status"]
-        
-        logger.debug(f"Waiting for instance '{instance_id}' response. Status is '{status}'.")
+
+        logger.debug(
+            f"Waiting for instance '{instance_id}' response. Status is '{status}'."
+        )
 
         # Possible values for 'Status'
         # 'Pending'|'InProgress'|'Delayed'|'Success'|'Cancelled'|'TimedOut'|'Failed'|'Cancelling'
         # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ssm.html#SSM.Client.get_command_invocation
         if status == "Success":
             break
-    
+
     if not status == "Success":
-        logger.warning(f"Could not contact instance '{instance_id}', status is '{status}'. Is something wrong?")
+        logger.warning(
+            f"Could not contact instance '{instance_id}', status is '{status}'. Is something wrong?"
+        )
         return
 
     for container_name in output.split():
         ignore_container = False
         if not container_name in IGNORED_CONTAINERS:
-            logger.debug(f"Checking container '{container_name}' on instance '{instance_id}'.")
+            logger.debug(
+                f"Checking container '{container_name}' on instance '{instance_id}'."
+            )
             if not list_services:
                 if re.search(service, container_name):
-                    logger.info(f"Instance '{instance_id}' runs container '{container_name}'.")
+                    logger.info(
+                        f"Instance '{instance_id}' runs container '{container_name}'."
+                    )
                     container_queue.put(instance_id)
                     break
             else:
@@ -185,7 +201,14 @@ def get_containers(instance_id=None, service="", list_services=False, client=Non
 
     return container_queue.qsize()
 
-def get_instance_id_by_service_name(region=REGION, instance_ids=None, service="", list_services=False, client=None):
+
+def get_instance_id_by_service_name(
+    region=REGION,
+    instance_ids=None,
+    service="",
+    list_services=False,
+    client=None,
+):
     if list_services:
         logger.info(f"List all deployed/running services.")
     else:
@@ -199,13 +222,26 @@ def get_instance_id_by_service_name(region=REGION, instance_ids=None, service=""
     for instance_id in instance_ids:
         if list_services:
             # It's to start threads, since we need to check all instances.
-            thread = Thread(target=get_containers, kwargs={"instance_id": instance_id, "service": service, "list_services": list_services, "client": client,})
+            thread = Thread(
+                target=get_containers,
+                kwargs={
+                    "instance_id": instance_id,
+                    "service": service,
+                    "list_services": list_services,
+                    "client": client,
+                },
+            )
             thread.daemon = True
             thread.start()
             threads.append(thread)
         else:
             # Not using threaded approach, since the loop is exited as soon as the service is found.
-            if get_containers(instance_id=instance_id, service=service, list_services=list_services, client=client):
+            if get_containers(
+                instance_id=instance_id,
+                service=service,
+                list_services=list_services,
+                client=client,
+            ):
                 break
 
     if list_services:
@@ -221,15 +257,18 @@ def get_instance_id_by_service_name(region=REGION, instance_ids=None, service=""
     else:
         print("\n".join(container_names))
 
+
 def main():
     """
-    
+
     """
 
     from _version import __version__
 
     parser = argparse.ArgumentParser(
-        description="Get instance info by a given service.", epilog="Example:\npython aws_get_instance_service_runs_on.py by-service-dns --region <aws_region> --cluster <ecs_cluster_name> --dns <service_dns_name> --output <output_info>", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        description="Get instance info by a given service.",
+        epilog="Example:\npython aws_get_instance_service_runs_on.py by-service-dns --region <aws_region> --cluster <ecs_cluster_name> --dns <service_dns_name> --output <output_info>",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--version",
@@ -239,44 +278,72 @@ def main():
 
     # Same for all subcommnds
     config = argparse.ArgumentParser(add_help=False)
-    
+
     config.add_argument(
         "-r", "--region", default=REGION_DEFAULT, help="AWS region."
     )
     config.add_argument(
-        "-c", "--cluster", required=True, help="AWS ECS cluster to get instances from."
+        "-c",
+        "--cluster",
+        required=True,
+        help="AWS ECS cluster to get instances from.",
     )
     config.add_argument(
-        "--debug", action='store_true',  help="Show debug info."
+        "--debug", action="store_true", help="Show debug info."
     )
-    
-    subparsers = parser.add_subparsers(help='sub-command help', dest='subcommand')
+
+    subparsers = parser.add_subparsers(
+        help="sub-command help", dest="subcommand"
+    )
     subparsers.required = True
 
     # create the parser for the "a" command
-    parser_dns = subparsers.add_parser('by-service-dns', parents=[config], help="Get instance information by service's dns name.")
-    parser_dns.add_argument(
-        "-d", "--dns", required=True,  help="DNS name of the service to find the instance for."
+    parser_dns = subparsers.add_parser(
+        "by-service-dns",
+        parents=[config],
+        help="Get instance information by service's dns name.",
     )
     parser_dns.add_argument(
-        "-o", "--output", nargs="?", default="ip", choices=['ip', 'id', 'all', 'service'], help="Information to return to the user. 'ip' returns the instance's private IP. 'id' returns the instance's id. 'all' returns the former and the private DNS. 'service' returns the service's IP only.."
+        "-d",
+        "--dns",
+        required=True,
+        help="DNS name of the service to find the instance for.",
     )
-    
+    parser_dns.add_argument(
+        "-o",
+        "--output",
+        nargs="?",
+        default="ip",
+        choices=["ip", "id", "all", "service"],
+        help="Information to return to the user. 'ip' returns the instance's private IP. 'id' returns the instance's id. 'all' returns the former and the private DNS. 'service' returns the service's IP only..",
+    )
+
     # By service name
-    parser_name = subparsers.add_parser('by-service-name', parents=[config], help="Get instance id by service's name.")
+    parser_name = subparsers.add_parser(
+        "by-service-name",
+        parents=[config],
+        help="Get instance id by service's name.",
+    )
     name_action = parser_name.add_mutually_exclusive_group(required=True)
     name_action.add_argument(
-        "-n", "--name", default="",  help="Name of the service to find the instance for."
+        "-n",
+        "--name",
+        default="",
+        help="Name of the service to find the instance for.",
     )
     name_action.add_argument(
-        "--list", action='store_true',  help="List all the services."
+        "--list", action="store_true", help="List all the services."
     )
-    
+
     # Return all cuuster instance ids
-    parser_ids = subparsers.add_parser('instance-ids', parents=[config], help="Get all container instance ids.")
-    
+    parser_ids = subparsers.add_parser(
+        "instance-ids",
+        parents=[config],
+        help="Get all container instance ids.",
+    )
+
     args = parser.parse_args()
-    
+
     by_service_dns = False
     by_service_name = False
     only_instance_ids = False
@@ -290,7 +357,7 @@ def main():
 
     region = args.region
     logger.info(f"Working in: {region}")
-    
+
     if CLUSTER_NAME:
         cluster_name = CLUSTER_NAME
     else:
@@ -304,7 +371,7 @@ def main():
     if args.subcommand == "by-service-dns":
         by_service_dns = True
         if SERVICE_DNS:
-            service_dns = SERVICE_DNS 
+            service_dns = SERVICE_DNS
         else:
             service_dns = args.dns
         if OUTPUT_INFO:
@@ -322,13 +389,21 @@ def main():
         only_instance_ids = True
 
     if only_instance_ids:
-        instance_ids = get_instance_ids_from_cluster(cluster=cluster_name, client=ecs_client)
+        instance_ids = get_instance_ids_from_cluster(
+            cluster=cluster_name, client=ecs_client
+        )
         print(" ".join(instance_ids))
         return
     elif by_service_name:
-        instance_ids = get_instance_ids_from_cluster(cluster=cluster_name, client=ecs_client)
+        instance_ids = get_instance_ids_from_cluster(
+            cluster=cluster_name, client=ecs_client
+        )
         instance_id = get_instance_id_by_service_name(
-           region=region, instance_ids=instance_ids, service=service_name, list_services=list_services, client=ssm_client
+            region=region,
+            instance_ids=instance_ids,
+            service=service_name,
+            list_services=list_services,
+            client=ssm_client,
         )
         return
     elif by_service_dns:
@@ -337,9 +412,13 @@ def main():
             print(service_ip)
             return
         else:
-            instance_ids = get_instance_ids_from_cluster(cluster=cluster_name, client=ecs_client)
+            instance_ids = get_instance_ids_from_cluster(
+                cluster=cluster_name, client=ecs_client
+            )
             instance_private_ip, instance_private_dns, instance_id = get_instance_info_by_service_dns(
-                instance_ids=instance_ids, service_ip=service_ip, client=ec2_client
+                instance_ids=instance_ids,
+                service_ip=service_ip,
+                client=ec2_client,
             )
             if output_info == "ip":
                 print(instance_private_ip)

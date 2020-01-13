@@ -177,4 +177,3 @@ Change the appropriate environment variables to write secrets with another AWS K
 ```
 CHAMBER_KMS_KEY_ALIAS=not_default_key aws-ssm-pstore <profile_from_~/.aws/config> <path_to_path_keystore_folder>
 ```
-

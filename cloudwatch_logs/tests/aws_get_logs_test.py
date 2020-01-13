@@ -17,19 +17,13 @@ def test_get_logs_successful():
 
     mock_client = mock.MagicMock()
     mock_client.get_log_events.return_value = {
-        'events': [
-            {
-                'timestamp': 123,
-                'message': 'string',
-                'ingestionTime': 123
-            },
+        "events": [
+            {"timestamp": 123, "message": "string", "ingestionTime": 123}
         ],
-        'nextForwardToken': 'string',
-        'nextBackwardToken': 'string'
+        "nextForwardToken": "string",
+        "nextBackwardToken": "string",
     }
-    get_logs(
-        client=mock_client,
-    )
+    get_logs(client=mock_client)
     mock_client.get_log_events.assert_called_once()
 
 
@@ -41,13 +35,11 @@ def test_get_logs_no_credentials_error(caplog):
 
     caplog.set_level(logging.ERROR, logger="AWSGetLogs")
     with pytest.raises(SystemExit) as pytest_wrapped_e:
-        get_logs(
-            client=mock_client,
-        )
+        get_logs(client=mock_client)
     assert pytest_wrapped_e.type == SystemExit
     assert pytest_wrapped_e.value.code == 1
     mock_client.get_log_events.assert_called_once()
-    
+
     print(caplog.records)
     assert len(caplog.records) == 1
     for record in caplog.records:
@@ -66,9 +58,7 @@ def test_get_logs_client_error(caplog):
 
     caplog.set_level(logging.ERROR, logger="AWSGetLogs")
     with pytest.raises(SystemExit) as pytest_wrapped_e:
-        get_logs(
-            client=mock_client,
-        )
+        get_logs(client=mock_client)
     assert pytest_wrapped_e.type == SystemExit
     assert pytest_wrapped_e.value.code == 1
     mock_client.get_log_events.assert_called_once()
@@ -76,9 +66,7 @@ def test_get_logs_client_error(caplog):
     assert len(caplog.records) == 1
     for record in caplog.records:
         assert record.levelname == "ERROR", "Wrong log message."
-        assert record.message.startswith(
-            "Error: "
-        ), "Wrong log message."
+        assert record.message.startswith("Error: "), "Wrong log message."
     caplog.clear()
 
 
@@ -90,24 +78,26 @@ def test_get_logs_filter_streams_successful(caplog):
 
     mock_client = mock.MagicMock()
     mock_client.filter_log_events.return_value = {
-        'events': [
+        "events": [
             {
-                'logStreamName': 'string',
-                'timestamp': 123,
-                'message': 'string',
-                'ingestionTime': 123,
-                'eventId': 'string'
-            },
+                "logStreamName": "string",
+                "timestamp": 123,
+                "message": "string",
+                "ingestionTime": 123,
+                "eventId": "string",
+            }
         ],
-        'searchedLogStreams': [
-            {
-                'logStreamName': 'string',
-                'searchedCompletely': True
-            },
-        ]
+        "searchedLogStreams": [
+            {"logStreamName": "string", "searchedCompletely": True}
+        ],
     }
 
-    get_logs_filter_streams(log_group="log_group", log_stream="log_stream", limit=1, client=mock_client,).__next__()
+    get_logs_filter_streams(
+        log_group="log_group",
+        log_stream="log_stream",
+        limit=1,
+        client=mock_client,
+    ).__next__()
 
     mock_client.filter_log_events.assert_called_once()
 
@@ -132,43 +122,44 @@ def test_get_logs_filter_streams_successful_two_runs(caplog):
     """
 
     mock_client = mock.MagicMock()
-    mock_client.filter_log_events.side_effect = [{
-        'events': [
-            {
-                'logStreamName': 'string',
-                'timestamp': 123,
-                'message': 'string',
-                'ingestionTime': 123,
-                'eventId': 'string'
-            },
-        ],
-        'searchedLogStreams': [
-            {
-                'logStreamName': 'string',
-                'searchedCompletely': True
-            },
-        ],
-        "nextToken": "next_token"
-    },
-    {
-        'events': [
-            {
-                'logStreamName': 'string_',
-                'timestamp': 1234,
-                'message': 'string_',
-                'ingestionTime': 1234,
-                'eventId': 'string_'
-            },
-        ],
-        'searchedLogStreams': [
-            {
-                'logStreamName': 'string_',
-                'searchedCompletely': False
-            },
-        ]
-    }]
+    mock_client.filter_log_events.side_effect = [
+        {
+            "events": [
+                {
+                    "logStreamName": "string",
+                    "timestamp": 123,
+                    "message": "string",
+                    "ingestionTime": 123,
+                    "eventId": "string",
+                }
+            ],
+            "searchedLogStreams": [
+                {"logStreamName": "string", "searchedCompletely": True}
+            ],
+            "nextToken": "next_token",
+        },
+        {
+            "events": [
+                {
+                    "logStreamName": "string_",
+                    "timestamp": 1234,
+                    "message": "string_",
+                    "ingestionTime": 1234,
+                    "eventId": "string_",
+                }
+            ],
+            "searchedLogStreams": [
+                {"logStreamName": "string_", "searchedCompletely": False}
+            ],
+        },
+    ]
 
-    gen_func = get_logs_filter_streams(log_group="log_group", log_stream="log_stream", limit=1, client=mock_client,)
+    gen_func = get_logs_filter_streams(
+        log_group="log_group",
+        log_stream="log_stream",
+        limit=1,
+        client=mock_client,
+    )
     gen_func.__next__()
     mock_client.filter_log_events.assert_called_once()
     gen_func.__next__()
@@ -186,7 +177,6 @@ def test_get_logs_filter_streams_successful_two_runs(caplog):
     caplog.clear()
 
 
-
 def test_get_logs_filter_streams_no_credentials_error(caplog):
     """No credentials when filtering log events in a given stream.
     """
@@ -198,7 +188,7 @@ def test_get_logs_filter_streams_no_credentials_error(caplog):
 
     caplog.set_level(logging.ERROR, logger="AWSGetLogs")
     with pytest.raises(SystemExit) as pytest_wrapped_e:
-        get_logs_filter_streams(client=mock_client,).__next__()
+        get_logs_filter_streams(client=mock_client).__next__()
         # for test in get_logs_filter_streams(client=mock_client,):
         #     print(test)
     assert pytest_wrapped_e.type == SystemExit
@@ -226,7 +216,7 @@ def test_get_logs_filter_streams_client_error(caplog):
 
     caplog.set_level(logging.ERROR, logger="AWSGetLogs")
     with pytest.raises(SystemExit) as pytest_wrapped_e:
-        get_logs_filter_streams(client=mock_client,).__next__()
+        get_logs_filter_streams(client=mock_client).__next__()
         # for test in get_logs_filter_streams(client=mock_client,):
         #     print(test)
     assert pytest_wrapped_e.type == SystemExit
@@ -237,7 +227,5 @@ def test_get_logs_filter_streams_client_error(caplog):
     assert len(caplog.records) == 1
     for record in caplog.records:
         assert record.levelname == "ERROR", "Wrong log message."
-        assert record.message.startswith(
-            "Error: "
-        ), "Wrong log message."
+        assert record.message.startswith("Error: "), "Wrong log message."
     caplog.clear()
