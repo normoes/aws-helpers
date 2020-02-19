@@ -29,7 +29,6 @@ import os
 import argparse
 import boto3
 import botocore
-import socket
 import logging
 import sys
 import functools
@@ -92,7 +91,8 @@ def make_time(
 def show_most_recent_log_streams(
     log_group=LOG_GROUP, limit_results=5, client=None, debug=False
 ):
-    next_token = "first"
+    # Add 'nosec' comment to make bandit ignore [B105:hardcoded_password_string]
+    next_token = "first"  # nosec
     parameters = {
         "logGroupName": log_group,
         "orderBy": "LastEventTime",
@@ -116,7 +116,7 @@ def show_most_recent_log_streams(
                     log_stream_name = log_stream.get("logStreamName", None)
                     if (
                         log_stream_name
-                        and not log_stream_name in most_recent_log_streams
+                        and log_stream_name not in most_recent_log_streams
                     ):
                         stream_main_name = "/".join(
                             log_stream_name.split("/")[:-1]
@@ -127,8 +127,8 @@ def show_most_recent_log_streams(
                         logger.info(stream_main_name)
                         if (
                             last_event_timestamp
-                            and not stream_main_name
-                            in most_recent_log_streams.keys()
+                            and stream_main_name
+                            not in most_recent_log_streams.keys()
                         ):
                             logger.info(log_stream)
                             most_recent_log_streams[stream_main_name] = {
@@ -178,7 +178,8 @@ def get_logs_filter_streams(
     client=None,
     debug=False,
 ):
-    next_token = "first"
+    # Add 'nosec' comment to make bandit ignore [B105:hardcoded_password_string]
+    next_token = "first"  # nosec
     start_time, end_time = make_time(start_time_offset, time_unit=time_unit)
     parameters = {
         "logGroupName": log_group,
@@ -213,8 +214,8 @@ def get_logs_filter_streams(
                             create_new_start_time = not create_new_start_time
                             start_time = end_time
                 for log_event in log_events:
-                    log_stream_name = log_event.get("logStreamName", None)
-                    timestamp = log_event.get("timestamp", -1)
+                    # log_stream_name = log_event.get("logStreamName", None)
+                    # timestamp = log_event.get("timestamp", -1)
                     message = log_event.get("message", "")
                     yield message
         except (botocore.errorfactory.ClientError) as e:
@@ -295,7 +296,7 @@ def get_logs_using_insights(
                 log_stream_name = log_stream.get("logStreamName", None)
                 if (
                     log_stream_name
-                    and not log_stream_name in most_recent_log_streams
+                    and log_stream_name not in most_recent_log_streams
                 ):
                     most_recent_log_streams.append(log_stream_name)
             # print(json.dumps(response, indent=4))
@@ -396,7 +397,8 @@ def get_logs(
 def main():
     try:
         from _version import __version__
-    except:
+    except Exception:
+        logger.warning("Using developer version.")
         __version__ = "develop"
 
     parser = argparse.ArgumentParser(
@@ -451,7 +453,7 @@ def main():
     subparsers.required = True
 
     # create the parser for the "a" command
-    parser_recent = subparsers.add_parser(
+    subparsers.add_parser(
         "recent-streams",
         parents=[config],
         help="Get most recent streams from Cloudwatch by a given stream.",
@@ -548,7 +550,7 @@ def main():
                 debug=debug,
             ):
                 print(message)
-        except (KeyboardInterrupt) as e:
+        except (KeyboardInterrupt):
             print("Stopped.")
     elif follow_stream:
         try:
@@ -563,7 +565,7 @@ def main():
                 debug=debug,
             ):
                 print(message)
-        except (KeyboardInterrupt) as e:
+        except (KeyboardInterrupt):
             print("Stopped.")
     elif recent_streams:
         print(

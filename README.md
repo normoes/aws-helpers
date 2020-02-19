@@ -54,7 +54,8 @@ For better readability I will leave out `aws-vault` in the examples below.
 There are 4 sub commands:
 * `by-service-dns` - Get instance information by service's dns name.
 * `by-service-name` - Get instance id by service's name.
-* `instance-ids` - Get all container instance ids.
+* `list-instances` - Get all cluster instances (instance ids).
+* `list-services` - Get all cluster services.
 
 Here you can find some examples to ssh into the appropriate EC2 instance:
 ```
@@ -69,9 +70,9 @@ aws ssm start-session --target "$(python /path/to/aws_get_instance_service_runs_
 Here you can find further examples of how to use this tool:
 ```
 # List all instance IDs in cluster
-python /path/to/aws_get_instance_service_runs_on.py instance-ids --region eu-west-2 --cluster my-cluster
+python /path/to/aws_get_instance_service_runs_on.py list-instances --region eu-west-2 --cluster my-cluster
 # List all service names deployed in the cluster
-python /path/to/aws_get_instance_service_runs_on.py by-service-name --region eu-west-2 --cluster my-cluster --list
+python /path/to/aws_get_instance_service_runs_on.py list-services --region eu-west-2 --cluster my-cluster
 ```
 
 Using regular expressions

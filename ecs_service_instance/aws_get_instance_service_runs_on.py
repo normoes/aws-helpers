@@ -19,10 +19,10 @@ How to:
     - aws_get_instance_service_runs_on.py by-service-name -h
     - python aws_get_instance_service_runs_on.py by-service-name --region <aws_region> --cluster <ecs_cluster_name> --name <service_name>
     - The tool also can list every running service running:
-    - python aws_get_instance_service_runs_on.py by-service-name --region <aws_region> --cluster <ecs_cluster_name> --list
+    - python aws_get_instance_service_runs_on.py list-services --region <aws_region> --cluster <ecs_cluster_name>
   * List instance ids:
     - It's possible to list every available instance id in the cluster.
-    - python aws_get_instance_service_runs_on.py instance-ids
+    - python aws_get_instance_service_runs_on.py list-instances
   * The tool should be used in combination with aws-vault. It uses boto3 and only works with valid AWS credentials.
   * The AWS region can be given as environemnt variable REGION
   * The AWS region can be given as argument (-r, --region)
@@ -46,7 +46,6 @@ import argparse
 import socket
 import logging
 import sys
-import json
 from time import sleep
 import re
 from threading import Thread
@@ -181,7 +180,7 @@ def get_containers(
 
     for container_name in output.split():
         ignore_container = False
-        if not container_name in IGNORED_CONTAINERS:
+        if container_name not in IGNORED_CONTAINERS:
             logger.debug(
                 f"Checking container '{container_name}' on instance '{instance_id}'."
             )
@@ -331,15 +330,15 @@ def main():
         default="",
         help="Name of the service to find the instance for.",
     )
-    name_action.add_argument(
-        "--list", action="store_true", help="List all the services."
+
+    # Return all cluster instances
+    subparsers.add_parser(
+        "list-instances", parents=[config], help="Get all cluster instances.",
     )
 
-    # Return all cuuster instance ids
-    parser_ids = subparsers.add_parser(
-        "instance-ids",
-        parents=[config],
-        help="Get all container instance ids.",
+    # Return all cluster services
+    subparsers.add_parser(
+        "list-services", parents=[config], help="Get all cluster services.",
     )
 
     args = parser.parse_args()
@@ -380,13 +379,15 @@ def main():
             output_info = args.output
     elif args.subcommand == "by-service-name":
         by_service_name = True
-        list_services = args.list
         if SERVICE_NAME:
             service_name = SERVICE_NAME
         else:
             service_name = args.name
-    elif args.subcommand == "instance-ids":
+    elif args.subcommand == "list-instances":
         only_instance_ids = True
+    elif args.subcommand == "list-services":
+        list_services = True
+        service_name = None
 
     if only_instance_ids:
         instance_ids = get_instance_ids_from_cluster(
@@ -394,7 +395,7 @@ def main():
         )
         print(" ".join(instance_ids))
         return
-    elif by_service_name:
+    elif by_service_name or list_services:
         instance_ids = get_instance_ids_from_cluster(
             cluster=cluster_name, client=ecs_client
         )
@@ -415,7 +416,11 @@ def main():
             instance_ids = get_instance_ids_from_cluster(
                 cluster=cluster_name, client=ecs_client
             )
-            instance_private_ip, instance_private_dns, instance_id = get_instance_info_by_service_dns(
+            (
+                instance_private_ip,
+                instance_private_dns,
+                instance_id,
+            ) = get_instance_info_by_service_dns(
                 instance_ids=instance_ids,
                 service_ip=service_ip,
                 client=ec2_client,

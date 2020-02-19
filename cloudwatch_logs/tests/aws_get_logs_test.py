@@ -1,10 +1,8 @@
 import logging
 import mock
 import pytest
-from datetime import datetime
 import botocore.session
 import botocore
-import boto3
 
 from css.aws_get_logs import get_logs, get_logs_filter_streams
 
