@@ -1,4 +1,4 @@
-#/usr/bin/env bash
+#!/usr/bin/env bash
 _aws-ssm-pstore_completions()
 {
   if [ "${#COMP_WORDS[@]}" == "2" ]; then
