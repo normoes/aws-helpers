@@ -96,6 +96,25 @@ The default output of the subcommand `by-service-dns` is the instance's private 
 
 Have a look [here](./cloudwatch_logs/README.md).
 
+## kms
+
+`aws_kms_keys.py`
+
+The default region is `eu-west-1`, change with the `--region` flag.
+
+This tool interacts with AWS KMS keys in the following ways:
+* Lists all keys `python aws_kms_keys.py list-keys`:
+    * Including `alias/aws/` aliased keys by default.
+    * Excluding `alias/aws/` aliased keys with the `--exclude-aws-alias` flag.
+* Encrypts a plain text with a given AWS KMS key:
+    ```
+        python aws_kms_keys.py encrypt --region <aws_region>  --plain <text_to_encrypt> --key-id=<key_id>
+    ```
+* Decrypts a previously encrypted plain text with a given AWS KMS key:
+    ```
+        python aws_kms_keys.py decrypt --region <aws_region>  --cipher <previously_encrypted_plain_text> --key-id=<key_id>
+    ```
+
 ## list_chamber_services
 
 `aws-ssm-pstore`
