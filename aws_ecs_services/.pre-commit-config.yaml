@@ -23,9 +23,9 @@ repos:
         )
       language_version: python3.7
       stages: [commit]
-# - repo: https://github.com/cryptosphere-systems/pre-commit-hooks-bandit.git
-#   rev: v1.0.4
-#   hooks:
-#   - id: python-bandit-vulnerability-check
-#     # args: [-l, --recursive, -x, tests]
-#     files: .py$
+- repo: https://github.com/cryptosphere-systems/pre-commit-hooks-bandit.git
+  rev: v1.0.4
+  hooks:
+  - id: python-bandit-vulnerability-check
+    # args: [-l, --recursive, -x, tests]
+    files: .py$

@@ -15,12 +15,14 @@ AWS_REGION_DEFAULT = "eu-west-1"
 
 
 def update_ecs_agents(
-    region=AWS_REGION_DEFAULT, list_clusters=False, list_container_instances=False,
+    region=AWS_REGION_DEFAULT,
+    list_clusters=False,
+    list_container_instances=False,
 ):
-    """Update all the containers' ecs agents.
+    """Update all the container instances' ecs agents in an account.
 
     https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs.html#ECS.Client.update_container_agent
-
+    # Using awscli
     aws-vault-css-sideprojects -- aws ecs update-container-agent --cluster aeond --container-instance 3414b292-716f-4aa3-ae15-1e16c7c418a0
     """
 
@@ -45,7 +47,9 @@ def update_ecs_agents(
         container_instances[cluster].extend(response["containerInstanceArns"])
 
     if list_container_instances:
-        logger.info(f"Showing all available container instances in all the clusters.")
+        logger.info(
+            f"Showing all available container instances in all the clusters."
+        )
         for cluster in clusters:
             print(f"{cluster}: {container_instances[cluster]}")
         return
@@ -58,7 +62,9 @@ def update_ecs_agents(
                 response = ecs_client.update_container_agent(
                     cluster=cluster, containerInstance=container_instance,
                 )
-                logger.info(f"Updated container instance '{container_instance}'.")
+                logger.info(
+                    f"Updated container instance '{container_instance}'."
+                )
                 print(
                     f"  Old agent version: {response['containerInstance']['versionInfo']['agentVersion']}."
                 )
@@ -106,7 +112,9 @@ def main():
         action="store_true",
         help="List all container instances. No ecs agent update.",
     )
-    parser.add_argument("--debug", action="store_true", help="Show debug info.")
+    parser.add_argument(
+        "--debug", action="store_true", help="Show debug info."
+    )
 
     args = parser.parse_args()
 

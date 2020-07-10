@@ -8,21 +8,21 @@ Goal:
 
 How to:
   * Get help
-    - aws_get_instance_service_runs_on.py -h
+    - aws_ecs_services.py -h
   * By service DNS name:
     - Getting information by a service's DNS name (AWS Route53), the tool gets the IP from this dns name and searches this IP in the list of private IPs in all the given cluster's instances.
-    - aws_get_instance_service_runs_on.py by-service-dns -h
-    - python aws_get_instance_service_runs_on.py by-service-dns --region <aws_region> --cluster <ecs_cluster_name> --dns <service_dns_name> --output <output_info>
+    - aws_ecs_services.py by-service-dns -h
+    - python aws_ecs_services.py by-service-dns --region <aws_region> --cluster <ecs_cluster_name> --dns <service_dns_name> --output <output_info>
   * By service name:
     - Getting the instance id by a service's name (ECS service), the tool connects to every cluster instance using AWS SSM (requires 'ssm-agent' on every instance, requires 'AWS Session Manager Plugin' locally) and returns the instance's id if the service can be found. The service is checked using regular expressions, so not the complete service name needs to be known, but the tool stops at the first match.
     - Services are found by checking running docker containerson the instances.
-    - aws_get_instance_service_runs_on.py by-service-name -h
-    - python aws_get_instance_service_runs_on.py by-service-name --region <aws_region> --cluster <ecs_cluster_name> --name <service_name>
+    - aws_ecs_services.py by-service-name -h
+    - python aws_ecs_services.py by-service-name --region <aws_region> --cluster <ecs_cluster_name> --name <service_name>
     - The tool also can list every running service running:
-    - python aws_get_instance_service_runs_on.py list-services --region <aws_region> --cluster <ecs_cluster_name>
+    - python aws_ecs_services.py list-services --region <aws_region> --cluster <ecs_cluster_name>
   * List instance ids:
     - It's possible to list every available instance id in the cluster.
-    - python aws_get_instance_service_runs_on.py list-instances
+    - python aws_ecs_services.py list-instances
   * The tool should be used in combination with aws-vault. It uses boto3 and only works with valid AWS credentials.
   * The AWS region can be given as environemnt variable REGION
   * The AWS region can be given as argument (-r, --region)
@@ -107,7 +107,9 @@ def get_instance_ids_from_cluster(cluster=CLUSTER_NAME, client=None):
         sys.exit(1)
 
 
-def get_instance_info_by_service_dns(instance_ids=None, service_ip="", client=None):
+def get_instance_info_by_service_dns(
+    instance_ids=None, service_ip="", client=None
+):
     instance_private_ip = instance_private_dns = instance_id = ""
     if instance_ids and service_ip:
         reservations = client.describe_instances(InstanceIds=instance_ids)[
@@ -120,21 +122,29 @@ def get_instance_info_by_service_dns(instance_ids=None, service_ip="", client=No
                 for eni in network_interfaces:
                     private_ip_address = eni.get("PrivateIpAddress", None)
                     if service_ip == private_ip_address:
-                        instance_private_dns = instance.get("PrivateDnsName", None)
-                        instance_private_ip = instance.get("PrivateIpAddress", None)
+                        instance_private_dns = instance.get(
+                            "PrivateDnsName", None
+                        )
+                        instance_private_ip = instance.get(
+                            "PrivateIpAddress", None
+                        )
                         instance_id = instance.get("InstanceId", None)
                         break
 
     return instance_private_ip, instance_private_dns, instance_id
 
 
-def get_containers(instance_id=None, service="", list_services=False, client=None):
+def get_containers(
+    instance_id=None, service="", list_services=False, client=None
+):
     logger.debug(f"Getting info from instance {instance_id}.")
     try:
         response = client.send_command(
             InstanceIds=[instance_id],
             DocumentName="AWS-RunShellScript",
-            Parameters={"commands": ["sudo docker container ls --format '{{.Names}}'"]},
+            Parameters={
+                "commands": ["sudo docker container ls --format '{{.Names}}'"]
+            },
         )
     except (client.exceptions.InvalidInstanceId) as e:
         logger.error(
@@ -197,7 +207,11 @@ def get_containers(instance_id=None, service="", list_services=False, client=Non
 
 
 def get_instance_id_by_service_name(
-    region=REGION, instance_ids=None, service="", list_services=False, client=None,
+    region=REGION,
+    instance_ids=None,
+    service="",
+    list_services=False,
+    client=None,
 ):
     if list_services:
         logger.info(f"List all deployed/running services.")
@@ -256,8 +270,8 @@ def main():
     from _version import __version__
 
     parser = argparse.ArgumentParser(
-        description="Get instance info by a given service.",
-        epilog="Example:\npython aws_get_instance_service_runs_on.py by-service-dns --region <aws_region> --cluster <ecs_cluster_name> --dns <service_dns_name> --output <output_info>",
+        description="Get ECS service info (e.g. EC2 instacne id) by a given service name.",
+        epilog="Example:\npython aws_ecs_services.py by-service-dns --region <aws_region> --cluster <ecs_cluster_name> --dns <service_dns_name> --output <output_info>",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -269,13 +283,22 @@ def main():
     # Same for all subcommnds
     config = argparse.ArgumentParser(add_help=False)
 
-    config.add_argument("-r", "--region", default=REGION_DEFAULT, help="AWS region.")
     config.add_argument(
-        "-c", "--cluster", required=True, help="AWS ECS cluster to get instances from.",
+        "-r", "--region", default=REGION_DEFAULT, help="AWS region."
     )
-    config.add_argument("--debug", action="store_true", help="Show debug info.")
+    config.add_argument(
+        "-c",
+        "--cluster",
+        required=True,
+        help="AWS ECS cluster to get instances from.",
+    )
+    config.add_argument(
+        "--debug", action="store_true", help="Show debug info."
+    )
 
-    subparsers = parser.add_subparsers(help="sub-command help", dest="subcommand")
+    subparsers = parser.add_subparsers(
+        help="sub-command help", dest="subcommand"
+    )
     subparsers.required = True
 
     # create the parser for the "a" command
@@ -296,12 +319,14 @@ def main():
         nargs="?",
         default=OUTPUT_INFO_DEFAULT,
         choices=["ip", "id", "all", "service"],
-        help="Information to return to the user. 'ip' returns the instance's private IP. 'id' returns the instance's id. 'all' returns the former and the private DNS. 'service' returns the service's IP only..",
+        help="Information to return to the user. 'ip' returns the instance's private IP. 'id' returns the instance's id. 'all' returns the former and the private DNS. 'service' returns the service's IP only.",
     )
 
     # By service name
     parser_name = subparsers.add_parser(
-        "by-service-name", parents=[config], help="Get instance id by service's name.",
+        "by-service-name",
+        parents=[config],
+        help="Get instance id by service's name.",
     )
     name_action = parser_name.add_mutually_exclusive_group(required=True)
     name_action.add_argument(
@@ -318,7 +343,9 @@ def main():
 
     # Return all cluster services
     subparsers.add_parser(
-        "list-services", parents=[config], help="Get all cluster services.",
+        "list-services",
+        parents=[config],
+        help="Get all active cluster services.",
     )
 
     args = parser.parse_args()
@@ -389,7 +416,9 @@ def main():
                 instance_private_dns,
                 instance_id,
             ) = get_instance_info_by_service_dns(
-                instance_ids=instance_ids, service_ip=service_ip, client=ec2_client,
+                instance_ids=instance_ids,
+                service_ip=service_ip,
+                client=ec2_client,
             )
             if output_info == "ip":
                 print(instance_private_ip)

@@ -96,6 +96,38 @@ The default output of the subcommand `by-service-dns` is the instance's private 
 
 Have a look [here](./cloudwatch_logs/README.md).
 
+## update_ecs_agents
+
+`update_ecs_agents.py`
+
+The default region is `eu-west-1`, change with the `--region` flag.
+
+This tool updates the `ecs-agent` in the account and the given region for all the instances in all clusters.
+```
+    # Update ecs-agent.
+    python update_ecs_agents.py --region <aws_region>
+```
+
+There are two more options, that provide some information on AWS ECS, but **do not update** the `ecs-agent`:
+* List all clusters:
+```
+    python update_ecs_agents.py --region eu-west-1 --list-clusters
+    # Result is a <space> separated list of cluster ARNs
+    arn:aws:ecs:eu-west-1:xyz:cluster/cluster_1 arn:aws:ecs:eu-west-1:xyz:cluster/cluster_2
+
+    # Result with onecluster per line
+    python update_ecs_agents.py --region eu-west-1 --list-clusters | xargs -n 1
+    arn:aws:ecs:eu-west-1:xyz:cluster/cluster_1
+    arn:aws:ecs:eu-west-1:xyz:cluster/cluster_2
+```
+* List all cluster container instances:
+```
+    python update_ecs_agents.py --region eu-west-1 --list-container-instances
+    # Result
+    arn:aws:ecs:eu-west-1:xyz:cluster/cluster_1: ['arn:aws:ecs:eu-west-1:xyz:container-instance/d838761c-4735-4c18-8c71-1ddf710e64de']
+arn:aws:ecs:eu-west-1:xyz:cluster/cluster_2: ['arn:aws:ecs:eu-west-1:xyz:container-instance/18f58ec9-a190-41dd-92c9-2fdd6756df7c']
+```
+
 ## kms
 
 `aws_kms_keys.py`
@@ -108,11 +140,11 @@ This tool interacts with AWS KMS keys in the following ways:
     * Excluding `alias/aws/` aliased keys with the `--exclude-aws-alias` flag.
 * Encrypts a plain text with a given AWS KMS key:
     ```
-        python aws_kms_keys.py encrypt --region <aws_region>  --plain <text_to_encrypt> --key-id=<key_id>
+        python aws_kms_keys.py encrypt --region <aws_region>  --plain="<text_to_encrypt>" --key-id=<key_id>
     ```
 * Decrypts a previously encrypted plain text with a given AWS KMS key:
     ```
-        python aws_kms_keys.py decrypt --region <aws_region>  --cipher <previously_encrypted_plain_text> --key-id=<key_id>
+        python aws_kms_keys.py decrypt --region <aws_region>  --cipher="<previously_encrypted_plain_text>" --key-id=<key_id>
     ```
 
 ## list_chamber_services

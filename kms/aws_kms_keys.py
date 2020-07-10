@@ -1,46 +1,5 @@
 #!/usr/bin/env python
 
-"""
-Goal:
-  * Get instance information (ip, id, dns) by a service's full DNS name or part of the service's name.
-  * List all instance ids in a cluster.
-  * list all services in a cluster.
-
-How to:
-  * Get help
-    - aws_get_instance_service_runs_on.py -h
-  * By service DNS name:
-    - Getting information by a service's DNS name (AWS Route53), the tool gets the IP from this dns name and searches this IP in the list of private IPs in all the given cluster's instances.
-    - aws_get_instance_service_runs_on.py by-service-dns -h
-    - python aws_get_instance_service_runs_on.py by-service-dns --region <aws_region> --cluster <ecs_cluster_name> --dns <service_dns_name> --output <output_info>
-  * By service name:
-    - Getting the instance id by a service's name (ECS service), the tool connects to every cluster instance using AWS SSM (requires 'ssm-agent' on every instance, requires 'AWS Session Manager Plugin' locally) and returns the instance's id if the service can be found. The service is checked using regular expressions, so not the complete service name needs to be known, but the tool stops at the first match.
-    - Services are found by checking running docker containerson the instances.
-    - aws_get_instance_service_runs_on.py by-service-name -h
-    - python aws_get_instance_service_runs_on.py by-service-name --region <aws_region> --cluster <ecs_cluster_name> --name <service_name>
-    - The tool also can list every running service running:
-    - python aws_get_instance_service_runs_on.py list-services --region <aws_region> --cluster <ecs_cluster_name>
-  * List instance ids:
-    - It's possible to list every available instance id in the cluster.
-    - python aws_get_instance_service_runs_on.py list-instances
-  * The tool should be used in combination with aws-vault. It uses boto3 and only works with valid AWS credentials.
-  * The AWS region can be given as environemnt variable REGION
-  * The AWS region can be given as argument (-r, --region)
-  * If the AWS region is set both ways, REGION has precedence.
-  * The ECS cluster can be given as environemnt variable CLUSTER_NAME
-  * The ECS cluster can be given as argument (-c, --cluster)
-  * If the ECS cluster is set both ways, CLUSTER_NAME has precedence.
-  * The service's dns name can be given as environemnt variable SERVICE_DNS
-  * The service's dns name can be given as argument (-d, --dns)
-  * If the service's dns name is set both ways, SERVICE_DNS has precedence.
-  * The oputput info can be given as environemnt variable OUTPUT_INFO
-  * The output info can be given as argument (-o, --output)
-  * If the output info  is set both ways, OUTPUT_INFO has precedence.
-  * The service's name can be given as environemnt variable SERVICE_NAME
-  * The service's name can be given as argument (-n, --name)
-  * If the service's name is set both ways, SERVICE_NAME has precedence.
-"""
-
 import os
 import argparse
 import logging
@@ -57,14 +16,17 @@ logger.setLevel(logging.INFO)
 REGION_DEFAULT = "eu-west-1"
 EXCLUDE_AWS_ALIAS_DEFAULT = (False,)
 
-REGION = os.environ.get("AWS_REGION", REGION_DEFAULT)
+REGION_ = os.environ.get("AWS_REGION", None)
+REGION = os.environ.get("AWS_DEFAULT_REGION", REGION_)
+if not REGION:
+    REGION = REGION_DEFAULT
 
 # List keys.
 IGNORED_ALIASES = ["alias/aws/"]  # Ignored KMS key aliases
 
 
 def get_kms_keys(exclude_aws_alias=False, client=None):
-    logger.info(f"Getting allthe keys.")
+    logger.info(f"Getting all the keys.")
 
     keys = {}
 
@@ -95,7 +57,9 @@ def get_kms_keys(exclude_aws_alias=False, client=None):
             if e.response["Error"]["Code"] == "KMSInternalException":
                 logger.error(f"No KMS keys found: {str(e)}.")
             elif e.response["Error"]["Code"] == "NotFoundException":
-                logger.error(f"An alias for key '{key_id}' was not found: {str(e)}.")
+                logger.error(
+                    f"An alias for key '{key_id}' was not found: {str(e)}."
+                )
             elif e.response["Error"]["Code"] == "InvalidArnException":
                 logger.error(
                     f"The given ARN '{key_arn}' for the key '{key_id}' is not valid: {str(e)}."
@@ -183,10 +147,14 @@ def main():
     # Same for all subcommnds
     config = argparse.ArgumentParser(add_help=False)
 
-    config.add_argument("-r", "--region", default=REGION_DEFAULT, help="AWS region.")
-    config.add_argument("--debug", action="store_true", help="Show debug info.")
+    config.add_argument("-r", "--region", default=REGION, help="AWS region.")
+    config.add_argument(
+        "--debug", action="store_true", help="Show debug info."
+    )
 
-    subparsers = parser.add_subparsers(help="sub-command help", dest="subcommand")
+    subparsers = parser.add_subparsers(
+        help="sub-command help", dest="subcommand"
+    )
     subparsers.required = True
 
     # create the parser for the "a" command
@@ -207,7 +175,10 @@ def main():
         "--plain", required=True, help="Plain text to be encrypted.",
     )
     encrypt.add_argument(
-        "--key-id", default="", required=True, help="KMD key id to use for encryption.",
+        "--key-id",
+        default="",
+        required=True,
+        help="KMD key id to use for encryption.",
     )
 
     # Decrypt.
@@ -220,7 +191,10 @@ def main():
         help="Cipher text to be decrypted, in the format: 'AQICAHjXDZ...'.",
     )
     decrypt.add_argument(
-        "--key-id", default="", required=True, help="KMD key id to use for decryption.",
+        "--key-id",
+        default="",
+        required=True,
+        help="KMD key id to use for decryption.",
     )
 
     args = parser.parse_args()
@@ -255,7 +229,9 @@ def main():
         key_id = args.key_id
 
     if list_keys:
-        keys = get_kms_keys(exclude_aws_alias=exclude_aws_alias, client=kms_client)
+        keys = get_kms_keys(
+            exclude_aws_alias=exclude_aws_alias, client=kms_client
+        )
         print(keys)
         return
     elif encrypt:
