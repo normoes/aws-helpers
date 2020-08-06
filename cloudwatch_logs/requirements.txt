@@ -1,4 +1,0 @@
-boto3>=1.10.25
-# tests
-pytest==5.3.5
-mock==4.0.1
